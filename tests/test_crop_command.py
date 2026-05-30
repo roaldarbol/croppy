@@ -16,7 +16,7 @@ def test_basic_command_shape(tmp_path: Path) -> None:
         settings=EncodeSettings(),
     )
     # Critical args present in expected order/structure
-    assert cmd[0].endswith("ffmpeg") or cmd[0].endswith("ffmpeg.exe")
+    assert cmd[0].lower().endswith(("ffmpeg", "ffmpeg.exe"))
     assert "-i" in cmd
     assert "-vf" in cmd
     vf_idx = cmd.index("-vf")
