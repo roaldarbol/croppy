@@ -1,23 +1,28 @@
-"""Top-level QMainWindow. Holds landing → editor swap."""
+"""Top-level QMainWindow. Holds landing → editor swap and the progress dock."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 from loguru import logger
-from PySide6.QtWidgets import QMainWindow, QMessageBox
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QDockWidget, QMainWindow, QMessageBox
 
+from croppy.ffmpeg.crop import default_output_path
 from croppy.ffmpeg.frame import FrameExtractError, extract_frame
 from croppy.ffmpeg.probe import ProbeError, probe
 from croppy.gui.editor import EditorWidget
 from croppy.gui.landing import LandingWidget
+from croppy.gui.progress_panel import ProgressPanel
+from croppy.jobs.job import CropJob
+from croppy.jobs.queue import JobQueue
 
 
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("croppy")
-        self.resize(1100, 700)
+        self.resize(1100, 760)
 
         self._video_path: Path | None = None
         self._editor: EditorWidget | None = None
@@ -25,6 +30,21 @@ class MainWindow(QMainWindow):
         self._landing = LandingWidget(self)
         self._landing.video_selected.connect(self.open_video)
         self.setCentralWidget(self._landing)
+
+        self._queue = JobQueue(parent=self)
+        self._progress_dock = QDockWidget("Progress", self)
+        self._progress_dock.setObjectName("progress_dock")
+        self._progress_dock.setAllowedAreas(
+            Qt.DockWidgetArea.BottomDockWidgetArea
+            | Qt.DockWidgetArea.TopDockWidgetArea
+        )
+        self.progress_panel = ProgressPanel(self._queue, parent=self._progress_dock)
+        self.progress_panel.cancel_requested.connect(self._queue.cancel)
+        self._progress_dock.setWidget(self.progress_panel)
+        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self._progress_dock)
+        self._progress_dock.hide()
+
+    # --- public API ---------------------------------------------------------
 
     def open_video(self, path: Path) -> None:
         logger.info("Opening {}", path)
@@ -43,9 +63,12 @@ class MainWindow(QMainWindow):
         self._video_path = path
         editor = EditorWidget(info, image, parent=self)
         editor.frame_change_requested.connect(self._reload_frame)
+        editor.process_requested.connect(self._start_processing)
         self._editor = editor
         self.setCentralWidget(editor)
         self.setWindowTitle(f"croppy — {path.name}")
+
+    # --- internals ----------------------------------------------------------
 
     def _reload_frame(self, frame_number: int) -> None:
         if self._video_path is None or self._editor is None:
@@ -61,3 +84,29 @@ class MainWindow(QMainWindow):
             )
             return
         self._editor.set_image(image)
+
+    def _start_processing(self) -> None:
+        if self._video_path is None or self._editor is None:
+            return
+        regions = self._editor.crop_regions()
+        if not regions:
+            return
+        settings = self._editor.encode_settings()
+        info = self._editor.info()
+        for index, region in enumerate(regions):
+            output_path = default_output_path(
+                self._video_path, index, container=settings.container
+            )
+            job = CropJob(
+                input_path=self._video_path,
+                output_path=output_path,
+                region=region,
+                settings=settings,
+                duration_seconds=info.duration_seconds,
+            )
+            # Row must exist before submit(), because submit() can fire
+            # job_started synchronously.
+            self.progress_panel.add_job(job)
+            self._queue.submit(job)
+        self._progress_dock.show()
+        self._progress_dock.raise_()
