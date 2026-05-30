@@ -20,7 +20,8 @@ from PySide6.QtWidgets import (
 from croppy.ffmpeg.probe import VideoInfo
 from croppy.gui.canvas import VideoCanvas
 from croppy.gui.crop_item import CropRectItem
-from croppy.models import CropRegion
+from croppy.gui.settings_panel import CollapsibleSection, SettingsPanel
+from croppy.models import CropRegion, EncodeSettings
 
 
 class EditorWidget(QWidget):
@@ -59,6 +60,9 @@ class EditorWidget(QWidget):
             item.crop_region().clamped(info.width, info.height).snapped
             for item in self.canvas.crops()
         ]
+
+    def encode_settings(self) -> EncodeSettings:
+        return self.settings_panel.settings()
 
     # --- UI -----------------------------------------------------------------
 
@@ -122,6 +126,11 @@ class EditorWidget(QWidget):
         cl.addWidget(self.crops_list)
         cl.addWidget(self.empty_label)
         v.addWidget(crops_group)
+
+        self.settings_section = CollapsibleSection("Encoding settings", expanded=False)
+        self.settings_panel = SettingsPanel()
+        self.settings_section.add_widget(self.settings_panel)
+        v.addWidget(self.settings_section)
 
         v.addStretch(1)
 
