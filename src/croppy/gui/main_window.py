@@ -1,11 +1,13 @@
-"""Top-level QMainWindow. Currently a placeholder — landing/editor wired in later steps."""
+"""Top-level QMainWindow. Currently shows the landing widget; editor swap lands later."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 from loguru import logger
-from PySide6.QtWidgets import QLabel, QMainWindow
+from PySide6.QtWidgets import QMainWindow
+
+from croppy.gui.landing import LandingWidget
 
 
 class MainWindow(QMainWindow):
@@ -13,9 +15,12 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("croppy")
         self.resize(1100, 700)
-        # Placeholder central widget; replaced when the landing/editor lands.
-        self.setCentralWidget(QLabel("croppy — drop a video here (UI coming soon)"))
+
+        self._landing = LandingWidget(self)
+        self._landing.video_selected.connect(self.open_video)
+        self.setCentralWidget(self._landing)
 
     def open_video(self, path: Path) -> None:
-        """Load a video into the editor. Stub for now."""
-        logger.info("open_video requested for {}", path)
+        """Load a video into the editor. Editor wiring lands in a later step."""
+        logger.info("MainWindow: open_video({})", path)
+        # TODO(editor): swap central widget to EditorWidget(path) once available.
