@@ -156,3 +156,82 @@ def test_job_row_status_styling_strings(qtbot, qapp, tmp_path: Path) -> None:
     assert row.status.toolTip() == "nope"
     row.set_canceled()
     assert "canceled" in row.status.text()
+
+
+def test_clear_finished_keeps_running_and_pending(qtbot, qapp, tmp_path: Path) -> None:
+    queue = JobQueue()
+    panel = ProgressPanel(queue)
+    qtbot.addWidget(panel)
+
+    done = _stub_job(tmp_path / "done.mp4")
+    failed = _stub_job(tmp_path / "fail.mp4")
+    canceled = _stub_job(tmp_path / "cancel.mp4")
+    pending = _stub_job(tmp_path / "pending.mp4")
+    running = _stub_job(tmp_path / "running.mp4")
+    for job in (done, failed, canceled, pending, running):
+        panel.add_job(job)
+
+    # Drive states via queue signals
+    queue.job_finished.emit(done.id)
+    queue.job_failed.emit(failed.id, "boom")
+    queue.job_canceled.emit(canceled.id)
+    queue.job_started.emit(running.id)
+    # pending stays PENDING
+
+    # set the actual state on the underlying job dataclasses since we bypassed Worker
+    done.state = JobState.DONE
+    failed.state = JobState.FAILED
+    canceled.state = JobState.CANCELED
+    pending.state = JobState.PENDING
+    running.state = JobState.RUNNING
+
+    panel.clear_finished()
+
+    remaining_ids = {row.job().id for row in panel.rows()}
+    assert remaining_ids == {pending.id, running.id}
+
+
+def test_clear_finished_button_enabled_state(qtbot, qapp, tmp_path: Path) -> None:
+    queue = JobQueue()
+    panel = ProgressPanel(queue)
+    qtbot.addWidget(panel)
+    assert not panel._clear_btn.isEnabled()
+
+    job = _stub_job(tmp_path / "x.mp4")
+    panel.add_job(job)
+    assert not panel._clear_btn.isEnabled()
+
+    job.state = JobState.DONE
+    queue.job_finished.emit(job.id)
+    assert panel._clear_btn.isEnabled()
+
+    panel.clear_finished()
+    assert not panel._clear_btn.isEnabled()
+
+
+def test_clear_finished_restores_empty_state(qtbot, qapp, tmp_path: Path) -> None:
+    queue = JobQueue()
+    panel = ProgressPanel(queue)
+    qtbot.addWidget(panel)
+    job = _stub_job(tmp_path / "x.mp4")
+    panel.add_job(job)
+    job.state = JobState.DONE
+    queue.job_finished.emit(job.id)
+
+    panel.clear_finished()
+    assert panel.rows() == []
+    assert not panel._empty.isHidden()
+    assert panel._scroll.isHidden()
+
+
+def test_clear_finished_button_triggers_clear(qtbot, qapp, tmp_path: Path) -> None:
+    queue = JobQueue()
+    panel = ProgressPanel(queue)
+    qtbot.addWidget(panel)
+    job = _stub_job(tmp_path / "x.mp4")
+    panel.add_job(job)
+    job.state = JobState.DONE
+    queue.job_finished.emit(job.id)
+    assert panel._clear_btn.isEnabled()
+    panel._clear_btn.click()
+    assert panel.rows() == []

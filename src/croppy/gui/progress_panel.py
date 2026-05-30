@@ -13,8 +13,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from croppy.jobs.job import CropJob
+from croppy.jobs.job import CropJob, JobState
 from croppy.jobs.queue import JobQueue
+
+_FINISHED_STATES = frozenset({JobState.DONE, JobState.FAILED, JobState.CANCELED})
 
 
 class JobRow(QWidget):
@@ -98,9 +100,17 @@ class ProgressPanel(QWidget):
         outer.setContentsMargins(8, 8, 8, 8)
         outer.setSpacing(4)
 
+        header = QHBoxLayout()
+        header.setContentsMargins(0, 0, 0, 0)
         self._empty = QLabel("No jobs yet.")
         self._empty.setStyleSheet("color: #888;")
-        outer.addWidget(self._empty)
+        self._clear_btn = QPushButton("Clear finished")
+        self._clear_btn.setEnabled(False)
+        self._clear_btn.clicked.connect(self.clear_finished)
+        header.addWidget(self._empty, 1)
+        header.addStretch(0)
+        header.addWidget(self._clear_btn, 0)
+        outer.addLayout(header)
 
         self._scroll = QScrollArea()
         self._scroll.setWidgetResizable(True)
@@ -142,6 +152,19 @@ class ProgressPanel(QWidget):
         self._rows.clear()
         self._empty.setVisible(True)
         self._scroll.setVisible(False)
+        self._update_clear_button()
+
+    def clear_finished(self) -> None:
+        """Remove rows whose job state is DONE / FAILED / CANCELED."""
+        for job_id, row in list(self._rows.items()):
+            if row.job().state in _FINISHED_STATES:
+                row.setParent(None)
+                row.deleteLater()
+                del self._rows[job_id]
+        if not self._rows:
+            self._empty.setVisible(True)
+            self._scroll.setVisible(False)
+        self._update_clear_button()
 
     def rows(self) -> list[JobRow]:
         return list(self._rows.values())
@@ -164,13 +187,22 @@ class ProgressPanel(QWidget):
         row = self._rows.get(job_id)
         if row is not None:
             row.set_done()
+        self._update_clear_button()
 
     def _on_failed(self, job_id: int, message: str) -> None:
         row = self._rows.get(job_id)
         if row is not None:
             row.set_failed(message)
+        self._update_clear_button()
 
     def _on_canceled(self, job_id: int) -> None:
         row = self._rows.get(job_id)
         if row is not None:
             row.set_canceled()
+        self._update_clear_button()
+
+    def _update_clear_button(self) -> None:
+        has_finished = any(
+            row.job().state in _FINISHED_STATES for row in self._rows.values()
+        )
+        self._clear_btn.setEnabled(has_finished)
