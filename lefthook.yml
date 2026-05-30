@@ -1,0 +1,11 @@
+pre-commit:
+  parallel: false
+  commands:
+    ruff-check:
+      glob: "*.py"
+      run: pixi run -e dev ruff check --fix {staged_files}
+      stage_fixed: true
+    ruff-format:
+      glob: "*.py"
+      run: pixi run -e dev ruff format {staged_files}
+      stage_fixed: true

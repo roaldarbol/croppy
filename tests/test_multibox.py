@@ -101,7 +101,6 @@ def test_canvas_does_not_create_tiny_drafts(qtbot, qapp, test_video: Path) -> No
     a graphics view is unreliable in headless test runs."""
     canvas = VideoCanvas()
     qtbot.addWidget(canvas)
-    info = probe(test_video)
     image = extract_frame(test_video, 1)
     canvas.set_image(image)
     # Simulate a draft that's below the threshold by directly calling add_crop

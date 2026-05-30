@@ -23,7 +23,7 @@ class CropRegion:
     h: int
 
     @property
-    def snapped(self) -> "CropRegion":
+    def snapped(self) -> CropRegion:
         """Return a copy with all components snapped to even integers.
 
         libx264 with yuv420p rejects odd dimensions. We floor each value to the
@@ -36,7 +36,7 @@ class CropRegion:
             h=max(2, _floor_even(self.h)),
         )
 
-    def clamped(self, max_w: int, max_h: int) -> "CropRegion":
+    def clamped(self, max_w: int, max_h: int) -> CropRegion:
         """Return a copy clamped to lie inside a ``max_w`` × ``max_h`` frame."""
         x = max(0, min(self.x, max_w - 2))
         y = max(0, min(self.y, max_h - 2))

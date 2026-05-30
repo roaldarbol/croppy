@@ -75,9 +75,7 @@ def probe(path: Path | str) -> VideoInfo:
     height = int(stream["height"])
     codec = str(stream.get("codec_name", ""))
     container = str(fmt.get("format_name", ""))
-    fps = _parse_rate(
-        stream.get("avg_frame_rate") or stream.get("r_frame_rate") or "0/0"
-    )
+    fps = _parse_rate(stream.get("avg_frame_rate") or stream.get("r_frame_rate") or "0/0")
     duration = _parse_duration(stream, fmt)
     nb_frames = _parse_nb_frames(stream, duration, fps)
 
@@ -113,9 +111,7 @@ def _parse_duration(stream: dict[str, Any], fmt: dict[str, Any]) -> float:
     return 0.0
 
 
-def _parse_nb_frames(
-    stream: dict[str, Any], duration: float, fps: float
-) -> int | None:
+def _parse_nb_frames(stream: dict[str, Any], duration: float, fps: float) -> int | None:
     val = stream.get("nb_frames")
     if val is not None:
         try:
@@ -123,5 +119,5 @@ def _parse_nb_frames(
         except (TypeError, ValueError):
             pass
     if duration > 0 and fps > 0:
-        return int(round(duration * fps))
+        return round(duration * fps)
     return None

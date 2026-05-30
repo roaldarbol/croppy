@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import itertools
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 
 from croppy.models import CropRegion, EncodeSettings
 
 
-class JobState(str, Enum):
+class JobState(StrEnum):
     PENDING = "pending"
     RUNNING = "running"
     DONE = "done"

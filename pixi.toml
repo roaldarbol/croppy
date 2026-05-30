@@ -8,6 +8,9 @@ version = "0.1.0"
 [tasks]
 croppy = "python -m croppy"
 test = "pytest"
+lint = "ruff check ."
+format = "ruff format ."
+install-hooks = "lefthook install"
 
 [dependencies]
 python = "3.12.*"
@@ -22,6 +25,8 @@ croppy = { path = ".", editable = true }
 [feature.dev.dependencies]
 pytest = ">=8"
 pytest-qt = ">=4"
+ruff = ">=0.6"
+lefthook = ">=1.7"
 
 [environments]
 default = { solve-group = "default" }

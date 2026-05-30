@@ -59,7 +59,7 @@ class JobRow(QWidget):
         return self._job
 
     def set_progress(self, fraction: float) -> None:
-        self.bar.setValue(int(round(fraction * 1000)))
+        self.bar.setValue(round(fraction * 1000))
 
     def set_running(self) -> None:
         self.status.setText("running")
@@ -202,7 +202,5 @@ class ProgressPanel(QWidget):
         self._update_clear_button()
 
     def _update_clear_button(self) -> None:
-        has_finished = any(
-            row.job().state in _FINISHED_STATES for row in self._rows.values()
-        )
+        has_finished = any(row.job().state in _FINISHED_STATES for row in self._rows.values())
         self._clear_btn.setEnabled(has_finished)

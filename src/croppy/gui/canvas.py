@@ -104,23 +104,26 @@ class VideoCanvas(QGraphicsView):
 
     # --- Qt overrides -------------------------------------------------------
 
-    def resizeEvent(self, event) -> None:  # noqa: ANN001
+    def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
         self._fit()
 
-    def showEvent(self, event) -> None:  # noqa: ANN001
+    def showEvent(self, event) -> None:
         super().showEvent(event)
         self._fit()
 
-    def mousePressEvent(self, event) -> None:  # noqa: ANN001
-        if event.button() == Qt.MouseButton.LeftButton and self._pixmap_item is not None:
-            if self._crop_item_at(event.pos()) is None:
-                self._begin_draft(self.mapToScene(event.pos()))
-                event.accept()
-                return
+    def mousePressEvent(self, event) -> None:
+        if (
+            event.button() == Qt.MouseButton.LeftButton
+            and self._pixmap_item is not None
+            and self._crop_item_at(event.pos()) is None
+        ):
+            self._begin_draft(self.mapToScene(event.pos()))
+            event.accept()
+            return
         super().mousePressEvent(event)
 
-    def mouseMoveEvent(self, event) -> None:  # noqa: ANN001
+    def mouseMoveEvent(self, event) -> None:
         if self._draft is not None and self._draft_origin is not None:
             cur = self.mapToScene(event.pos())
             self._draft.setRect(QRectF(self._draft_origin, cur).normalized())
@@ -128,7 +131,7 @@ class VideoCanvas(QGraphicsView):
             return
         super().mouseMoveEvent(event)
 
-    def mouseReleaseEvent(self, event) -> None:  # noqa: ANN001
+    def mouseReleaseEvent(self, event) -> None:
         if self._draft is not None:
             rect = self._draft.rect()
             self._scene.removeItem(self._draft)
@@ -140,7 +143,7 @@ class VideoCanvas(QGraphicsView):
             return
         super().mouseReleaseEvent(event)
 
-    def keyPressEvent(self, event) -> None:  # noqa: ANN001
+    def keyPressEvent(self, event) -> None:
         if event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
             removed_any = False
             for it in list(self._scene.selectedItems()):
@@ -176,9 +179,7 @@ class VideoCanvas(QGraphicsView):
         fill = QColor(_DRAFT_BORDER)
         fill.setAlphaF(0.12)
         self._draft.setBrush(QBrush(fill))
-        self._draft.setFlag(
-            QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False
-        )
+        self._draft.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
         self._scene.addItem(self._draft)
         self._scene.clearSelection()
 

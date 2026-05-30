@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 
@@ -28,7 +28,7 @@ def _version_callback(value: bool) -> None:
 def main(
     ctx: typer.Context,
     video: Annotated[
-        Optional[Path],
+        Path | None,
         typer.Argument(
             exists=True,
             file_okay=True,

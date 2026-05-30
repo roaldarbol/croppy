@@ -23,7 +23,9 @@ def test_output_dir_defaults_to_input_parent(qtbot, qapp, test_video: Path) -> N
     assert editor.output_dir() == test_video.parent
 
 
-def test_set_output_dir_updates_field_and_tooltip(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
+def test_set_output_dir_updates_field_and_tooltip(
+    qtbot, qapp, test_video: Path, tmp_path: Path
+) -> None:
     info = probe(test_video)
     image = extract_frame(test_video, 1)
     editor = EditorWidget(info, image)
@@ -67,7 +69,9 @@ def test_default_output_path_respects_output_dir(tmp_path: Path) -> None:
     assert p == out_dir / "clip_crop3.mkv"
 
 
-def test_main_window_writes_to_chosen_output_dir(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
+def test_main_window_writes_to_chosen_output_dir(
+    qtbot, qapp, test_video: Path, tmp_path: Path
+) -> None:
     """End-to-end: change the output folder, click Process, verify the file lands there."""
     src_dir = tmp_path / "src"
     out_dir = tmp_path / "outputs"

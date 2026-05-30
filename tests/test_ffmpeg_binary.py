@@ -21,9 +21,7 @@ def test_find_ffprobe_returns_existing_file() -> None:
     assert path.is_file()
 
 
-def test_override_to_missing_file_raises(
-    monkeypatch: pytest.MonkeyPatch, tmp_path
-) -> None:
+def test_override_to_missing_file_raises(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     bogus = tmp_path / "nope"
     monkeypatch.setenv("CROPPY_FFMPEG", str(bogus))
     with pytest.raises(BinaryNotFoundError):

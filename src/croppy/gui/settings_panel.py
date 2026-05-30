@@ -59,12 +59,9 @@ class CollapsibleSection(QWidget):
         self._toggle.setCheckable(True)
         self._toggle.setChecked(expanded)
         self._toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self._toggle.setArrowType(
-            Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow
-        )
+        self._toggle.setArrowType(Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow)
         self._toggle.setStyleSheet(
-            "QToolButton { border: none; font-weight: bold; padding: 4px; "
-            "text-align: left; }"
+            "QToolButton { border: none; font-weight: bold; padding: 4px; text-align: left; }"
         )
         self._toggle.toggled.connect(self._on_toggled)
 
@@ -90,9 +87,7 @@ class CollapsibleSection(QWidget):
 
     def _on_toggled(self, expanded: bool) -> None:
         self._content.setVisible(expanded)
-        self._toggle.setArrowType(
-            Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow
-        )
+        self._toggle.setArrowType(Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow)
 
 
 def _tune_to_ui(tune: str) -> str:
@@ -145,9 +140,7 @@ class SettingsPanel(QWidget):
         self.preset_combo.addItems(PRESETS)
         if initial.preset in PRESETS:
             self.preset_combo.setCurrentText(initial.preset)
-        self.preset_combo.setToolTip(
-            "Slower presets compress better but take longer."
-        )
+        self.preset_combo.setToolTip("Slower presets compress better but take longer.")
         form.addRow("Preset:", self.preset_combo)
 
         self.crf_spin = QSpinBox()
@@ -179,9 +172,7 @@ class SettingsPanel(QWidget):
         self.audio_combo.addItems(AUDIO_MODES)
         if initial.audio_mode in AUDIO_MODES:
             self.audio_combo.setCurrentText(initial.audio_mode)
-        self.audio_combo.setToolTip(
-            "copy = stream the original audio; aac = re-encode."
-        )
+        self.audio_combo.setToolTip("copy = stream the original audio; aac = re-encode.")
         form.addRow("Audio:", self.audio_combo)
 
         self.audio_bitrate_combo = QComboBox()
@@ -262,6 +253,4 @@ class SettingsPanel(QWidget):
         self.audio_bitrate_combo.setEnabled(self.audio_combo.currentText() == "aac")
 
     def _update_faststart_enabled(self) -> None:
-        self.faststart_check.setEnabled(
-            self.container_combo.currentText() in ("mp4", "mov")
-        )
+        self.faststart_check.setEnabled(self.container_combo.currentText() in ("mp4", "mov"))

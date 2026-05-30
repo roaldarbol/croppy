@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 from loguru import logger
 from PySide6.QtCore import QEvent, Qt, Signal
@@ -113,9 +113,7 @@ class LandingWidget(QWidget):
         )
 
     def open_dialog(self) -> None:
-        path_str, _ = QFileDialog.getOpenFileName(
-            self, "Open video", "", file_dialog_filter()
-        )
+        path_str, _ = QFileDialog.getOpenFileName(self, "Open video", "", file_dialog_filter())
         if path_str:
             self._emit_path(Path(path_str))
 
@@ -126,9 +124,8 @@ class LandingWidget(QWidget):
     # --- mouse / drag-drop --------------------------------------------------
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
-        if (
-            event.button() == Qt.MouseButton.LeftButton
-            and self._card.geometry().contains(event.position().toPoint())
+        if event.button() == Qt.MouseButton.LeftButton and self._card.geometry().contains(
+            event.position().toPoint()
         ):
             self.open_dialog()
             event.accept()

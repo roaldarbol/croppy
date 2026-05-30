@@ -88,10 +88,10 @@ class CropRectItem(QGraphicsObject):
     def crop_region(self) -> CropRegion:
         r = self._rect.normalized()
         return CropRegion(
-            x=int(round(r.x())),
-            y=int(round(r.y())),
-            w=int(round(r.width())),
-            h=int(round(r.height())),
+            x=round(r.x()),
+            y=round(r.y()),
+            w=round(r.width()),
+            h=round(r.height()),
         )
 
     # --- QGraphicsObject overrides ------------------------------------------
@@ -186,7 +186,7 @@ class CropRectItem(QGraphicsObject):
             return
         super().mouseReleaseEvent(event)
 
-    def keyPressEvent(self, event) -> None:  # noqa: ANN001
+    def keyPressEvent(self, event) -> None:
         if event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
             self.delete_requested.emit()
             event.accept()

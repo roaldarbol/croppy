@@ -99,11 +99,7 @@ class EditorWidget(QWidget):
         v.setContentsMargins(8, 8, 8, 8)
         v.setSpacing(12)
 
-        nframes = (
-            f" · {self._info.nb_frames} frames"
-            if self._info.nb_frames is not None
-            else ""
-        )
+        nframes = f" · {self._info.nb_frames} frames" if self._info.nb_frames is not None else ""
         summary = QLabel(
             f"<b>{self._info.path.name}</b><br>"
             f"{self._info.width}×{self._info.height} · "
@@ -129,9 +125,7 @@ class EditorWidget(QWidget):
         crops_group = QGroupBox("Crops")
         cl = QVBoxLayout(crops_group)
         self.crops_list = QListWidget()
-        self.crops_list.setSelectionMode(
-            QListWidget.SelectionMode.SingleSelection
-        )
+        self.crops_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
         self.empty_label = QLabel("Click-and-drag on the frame to draw a crop.")
         self.empty_label.setStyleSheet("color: #888;")
         self.empty_label.setWordWrap(True)
@@ -178,11 +172,7 @@ class EditorWidget(QWidget):
         try:
             self.crops_list.clear()
             for crop in items:
-                snapped = (
-                    crop.crop_region()
-                    .clamped(self._info.width, self._info.height)
-                    .snapped
-                )
+                snapped = crop.crop_region().clamped(self._info.width, self._info.height).snapped
                 row = QListWidgetItem(
                     f"Crop {crop.index() + 1}  ·  "
                     f"{snapped.w}×{snapped.h} @ ({snapped.x}, {snapped.y})"

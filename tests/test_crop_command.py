@@ -36,8 +36,8 @@ def test_audio_copy_vs_aac(tmp_path: Path) -> None:
     )
     copy = build_crop_command(**base, settings=EncodeSettings(audio_mode="copy"))
     aac = build_crop_command(**base, settings=EncodeSettings(audio_mode="aac"))
-    assert "copy" == copy[copy.index("-c:a") + 1]
-    assert "aac" == aac[aac.index("-c:a") + 1]
+    assert copy[copy.index("-c:a") + 1] == "copy"
+    assert aac[aac.index("-c:a") + 1] == "aac"
     assert "-b:a" in aac
     # bitrate value comes from settings (default 192k)
     assert aac[aac.index("-b:a") + 1] == "192k"

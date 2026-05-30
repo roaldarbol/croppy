@@ -63,7 +63,5 @@ def extract_frame(video_path: Path | str, frame_number: int = 1) -> QImage:
 
     image = QImage()
     if not image.loadFromData(result.stdout, "PNG"):
-        raise FrameExtractError(
-            f"Could not decode PNG output from ffmpeg for frame {frame_number}"
-        )
+        raise FrameExtractError(f"Could not decode PNG output from ffmpeg for frame {frame_number}")
     return image

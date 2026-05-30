@@ -35,8 +35,7 @@ class MainWindow(QMainWindow):
         self._progress_dock = QDockWidget("Progress", self)
         self._progress_dock.setObjectName("progress_dock")
         self._progress_dock.setAllowedAreas(
-            Qt.DockWidgetArea.BottomDockWidgetArea
-            | Qt.DockWidgetArea.TopDockWidgetArea
+            Qt.DockWidgetArea.BottomDockWidgetArea | Qt.DockWidgetArea.TopDockWidgetArea
         )
         self.progress_panel = ProgressPanel(self._queue, parent=self._progress_dock)
         self.progress_panel.cancel_requested.connect(self._queue.cancel)

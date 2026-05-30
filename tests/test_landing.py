@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
 from PySide6.QtCore import QUrl
 
 from croppy.gui.landing import (
@@ -82,21 +81,25 @@ def test_landing_widget_open_dialog_uses_dialog(qtbot, tmp_path: Path) -> None:
     widget = LandingWidget()
     qtbot.addWidget(widget)
     video = _make(tmp_path, ".mov")
-    with patch(
-        "croppy.gui.landing.QFileDialog.getOpenFileName",
-        return_value=(str(video), ""),
+    with (
+        patch(
+            "croppy.gui.landing.QFileDialog.getOpenFileName",
+            return_value=(str(video), ""),
+        ),
+        qtbot.waitSignal(widget.video_selected, timeout=500) as blocker,
     ):
-        with qtbot.waitSignal(widget.video_selected, timeout=500) as blocker:
-            widget.open_dialog()
+        widget.open_dialog()
     assert blocker.args == [video]
 
 
 def test_landing_widget_open_dialog_canceled_no_emit(qtbot) -> None:
     widget = LandingWidget()
     qtbot.addWidget(widget)
-    with patch(
-        "croppy.gui.landing.QFileDialog.getOpenFileName",
-        return_value=("", ""),
+    with (
+        patch(
+            "croppy.gui.landing.QFileDialog.getOpenFileName",
+            return_value=("", ""),
+        ),
+        qtbot.assertNotEmitted(widget.video_selected, wait=200),
     ):
-        with qtbot.assertNotEmitted(widget.video_selected, wait=200):
-            widget.open_dialog()
+        widget.open_dialog()

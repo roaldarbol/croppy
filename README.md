@@ -37,8 +37,15 @@ croppy path/to/clip.mp4 # opens the GUI with that video pre-loaded
 ## Development
 
 ```bash
+pixi run -e dev install-hooks  # one-time: wire lefthook git hooks
 pixi run -e dev test
+pixi run -e dev lint           # ruff check
+pixi run -e dev format         # ruff format
 ```
+
+Pre-commit hooks (managed by [lefthook](https://github.com/evilmartians/lefthook))
+run `ruff check --fix` and `ruff format` on staged Python files. After cloning,
+run `pixi run -e dev install-hooks` once to wire them up.
 
 ## License
 

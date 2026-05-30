@@ -5,8 +5,8 @@ from croppy.jobs.queue import DEFAULT_MAX_WORKERS, JobQueue
 from croppy.jobs.worker import Worker
 
 __all__ = [
-    "CropJob",
     "DEFAULT_MAX_WORKERS",
+    "CropJob",
     "JobQueue",
     "JobState",
     "Worker",
