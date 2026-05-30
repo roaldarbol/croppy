@@ -1,0 +1,16 @@
+version: 2
+
+# Note: pixi.lock is not handled by Dependabot. Run `pixi update` locally,
+# or wire up prefix-dev/setup-pixi's auto-update workflow if you want bot PRs.
+
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: ci
+      include: scope

@@ -11,6 +11,7 @@ test = "pytest"
 lint = "ruff check ."
 format = "ruff format ."
 install-hooks = "lefthook install"
+build = { cmd = "python -m build", description = "Build sdist + wheel into ./dist/" }
 
 [dependencies]
 python = "3.12.*"
@@ -27,6 +28,7 @@ pytest = ">=8"
 pytest-qt = ">=4"
 ruff = ">=0.6"
 lefthook = ">=1.7"
+python-build = ">=1.0"
 
 [environments]
 default = { solve-group = "default" }
