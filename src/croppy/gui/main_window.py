@@ -93,9 +93,13 @@ class MainWindow(QMainWindow):
             return
         settings = self._editor.encode_settings()
         info = self._editor.info()
+        output_dir = self._editor.output_dir()
         for index, region in enumerate(regions):
             output_path = default_output_path(
-                self._video_path, index, container=settings.container
+                self._video_path,
+                index,
+                container=settings.container,
+                output_dir=output_dir,
             )
             job = CropJob(
                 input_path=self._video_path,

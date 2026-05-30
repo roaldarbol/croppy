@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QImage
 from PySide6.QtWidgets import (
+    QFileDialog,
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QListWidget,
     QListWidgetItem,
     QPushButton,
@@ -63,6 +67,14 @@ class EditorWidget(QWidget):
 
     def encode_settings(self) -> EncodeSettings:
         return self.settings_panel.settings()
+
+    def output_dir(self) -> Path:
+        return Path(self.output_dir_edit.text())
+
+    def set_output_dir(self, path: Path) -> None:
+        text = str(path)
+        self.output_dir_edit.setText(text)
+        self.output_dir_edit.setToolTip(text)
 
     # --- UI -----------------------------------------------------------------
 
@@ -126,6 +138,20 @@ class EditorWidget(QWidget):
         cl.addWidget(self.crops_list)
         cl.addWidget(self.empty_label)
         v.addWidget(crops_group)
+
+        output_group = QGroupBox("Output folder")
+        og = QHBoxLayout(output_group)
+        og.setContentsMargins(8, 8, 8, 8)
+        og.setSpacing(6)
+        self.output_dir_edit = QLineEdit(str(self._info.path.parent))
+        self.output_dir_edit.setReadOnly(True)
+        self.output_dir_edit.setToolTip(str(self._info.path.parent))
+        self.output_dir_edit.setCursorPosition(0)
+        self.browse_output_btn = QPushButton("Browse…")
+        self.browse_output_btn.clicked.connect(self._browse_output_dir)
+        og.addWidget(self.output_dir_edit, 1)
+        og.addWidget(self.browse_output_btn, 0)
+        v.addWidget(output_group)
 
         self.settings_section = CollapsibleSection("Encoding settings", expanded=False)
         self.settings_panel = SettingsPanel()
@@ -192,3 +218,12 @@ class EditorWidget(QWidget):
             self.canvas.select_crop(target)
         finally:
             self._syncing_selection = False
+
+    def _browse_output_dir(self) -> None:
+        chosen = QFileDialog.getExistingDirectory(
+            self,
+            "Choose output folder",
+            str(self.output_dir()),
+        )
+        if chosen:
+            self.set_output_dir(Path(chosen))
