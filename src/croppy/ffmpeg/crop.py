@@ -7,6 +7,8 @@ from pathlib import Path
 from croppy.ffmpeg.binary import find_ffmpeg
 from croppy.models import CropRegion, EncodeSettings
 
+_FASTSTART_CONTAINERS = frozenset({"mp4", "mov"})
+
 
 def build_crop_command(
     input_path: Path,
@@ -23,11 +25,29 @@ def build_crop_command(
     parse the structured progress stream from stdout.
     """
     r = region.snapped
-    audio_args = (
-        ["-c:a", "copy"]
-        if settings.audio_mode == "copy"
-        else ["-c:a", "aac", "-b:a", "192k"]
-    )
+
+    video_args: list[str] = [
+        "-c:v",
+        settings.video_codec,
+        "-crf",
+        str(settings.crf),
+        "-preset",
+        settings.preset,
+        "-pix_fmt",
+        settings.pixel_format,
+    ]
+    if settings.tune:
+        video_args += ["-tune", settings.tune]
+
+    if settings.audio_mode == "copy":
+        audio_args = ["-c:a", "copy"]
+    else:
+        audio_args = ["-c:a", "aac", "-b:a", settings.audio_bitrate]
+
+    container_args: list[str] = []
+    if settings.faststart and settings.container in _FASTSTART_CONTAINERS:
+        container_args += ["-movflags", "+faststart"]
+
     return [
         str(find_ffmpeg()),
         "-y",
@@ -38,21 +58,23 @@ def build_crop_command(
         str(input_path),
         "-vf",
         f"crop={r.w}:{r.h}:{r.x}:{r.y}",
-        "-c:v",
-        "libx264",
-        "-crf",
-        str(settings.crf),
-        "-preset",
-        settings.preset,
-        "-pix_fmt",
-        "yuv420p",
+        *video_args,
         *audio_args,
+        *container_args,
         "-progress",
         "pipe:1",
         str(output_path),
     ]
 
 
-def default_output_path(input_path: Path, index: int, container: str = "mp4") -> Path:
-    """Return ``<input_stem>_crop<index+1>.<container>`` next to ``input_path``."""
-    return input_path.with_name(f"{input_path.stem}_crop{index + 1}.{container}")
+def default_output_path(
+    input_path: Path,
+    index: int,
+    container: str = "mp4",
+    output_dir: Path | None = None,
+) -> Path:
+    """Return ``<input_stem>_crop<index+1>.<container>`` in ``output_dir`` if given,
+    else next to ``input_path``.
+    """
+    parent = output_dir if output_dir is not None else input_path.parent
+    return parent / f"{input_path.stem}_crop{index + 1}.{container}"

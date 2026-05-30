@@ -51,7 +51,12 @@ class EncodeSettings:
     quality/size compromise; everything is overridable from the settings panel.
     """
 
-    crf: int = 18
-    preset: str = "medium"
-    audio_mode: str = "copy"  # "copy" or "aac"
     container: str = "mp4"
+    video_codec: str = "libx264"
+    preset: str = "medium"
+    crf: int = 18
+    tune: str = ""  # empty = no -tune flag
+    pixel_format: str = "yuv420p"
+    audio_mode: str = "copy"  # "copy" or "aac"
+    audio_bitrate: str = "192k"
+    faststart: bool = True  # only honored for mp4/mov containers

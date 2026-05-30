@@ -39,6 +39,83 @@ def test_audio_copy_vs_aac(tmp_path: Path) -> None:
     assert "copy" == copy[copy.index("-c:a") + 1]
     assert "aac" == aac[aac.index("-c:a") + 1]
     assert "-b:a" in aac
+    # bitrate value comes from settings (default 192k)
+    assert aac[aac.index("-b:a") + 1] == "192k"
+
+
+def test_audio_bitrate_honored(tmp_path: Path) -> None:
+    cmd = build_crop_command(
+        input_path=tmp_path / "in.mp4",
+        output_path=tmp_path / "out.mp4",
+        region=CropRegion(0, 0, 64, 64),
+        settings=EncodeSettings(audio_mode="aac", audio_bitrate="256k"),
+    )
+    assert cmd[cmd.index("-b:a") + 1] == "256k"
+
+
+def test_video_codec_honored(tmp_path: Path) -> None:
+    cmd = build_crop_command(
+        input_path=tmp_path / "in.mp4",
+        output_path=tmp_path / "out.mp4",
+        region=CropRegion(0, 0, 64, 64),
+        settings=EncodeSettings(video_codec="libx265"),
+    )
+    assert cmd[cmd.index("-c:v") + 1] == "libx265"
+
+
+def test_tune_added_when_set(tmp_path: Path) -> None:
+    no_tune = build_crop_command(
+        input_path=tmp_path / "in.mp4",
+        output_path=tmp_path / "out.mp4",
+        region=CropRegion(0, 0, 64, 64),
+        settings=EncodeSettings(tune=""),
+    )
+    assert "-tune" not in no_tune
+
+    with_tune = build_crop_command(
+        input_path=tmp_path / "in.mp4",
+        output_path=tmp_path / "out.mp4",
+        region=CropRegion(0, 0, 64, 64),
+        settings=EncodeSettings(tune="film"),
+    )
+    assert "-tune" in with_tune
+    assert with_tune[with_tune.index("-tune") + 1] == "film"
+
+
+def test_pixel_format_honored(tmp_path: Path) -> None:
+    cmd = build_crop_command(
+        input_path=tmp_path / "in.mp4",
+        output_path=tmp_path / "out.mp4",
+        region=CropRegion(0, 0, 64, 64),
+        settings=EncodeSettings(pixel_format="yuv422p"),
+    )
+    assert cmd[cmd.index("-pix_fmt") + 1] == "yuv422p"
+
+
+def test_faststart_only_for_mp4_mov(tmp_path: Path) -> None:
+    mp4 = build_crop_command(
+        input_path=tmp_path / "in.mp4",
+        output_path=tmp_path / "out.mp4",
+        region=CropRegion(0, 0, 64, 64),
+        settings=EncodeSettings(container="mp4", faststart=True),
+    )
+    assert "-movflags" in mp4 and "+faststart" in mp4
+
+    mkv = build_crop_command(
+        input_path=tmp_path / "in.mp4",
+        output_path=tmp_path / "out.mkv",
+        region=CropRegion(0, 0, 64, 64),
+        settings=EncodeSettings(container="mkv", faststart=True),
+    )
+    assert "-movflags" not in mkv
+
+    off = build_crop_command(
+        input_path=tmp_path / "in.mp4",
+        output_path=tmp_path / "out.mp4",
+        region=CropRegion(0, 0, 64, 64),
+        settings=EncodeSettings(container="mp4", faststart=False),
+    )
+    assert "-movflags" not in off
 
 
 def test_command_snaps_odd_region(tmp_path: Path) -> None:
