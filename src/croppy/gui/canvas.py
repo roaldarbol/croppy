@@ -1,22 +1,32 @@
-"""The video preview canvas — QGraphicsView showing a single video frame."""
+"""The video preview canvas — QGraphicsView showing a single video frame.
+
+Also owns the collection of :class:`CropRectItem` boxes drawn on the frame.
+Empty-area click-drag creates a new crop; clicking on a crop selects it
+(with its handles); Delete/Backspace removes the selected crops.
+"""
 
 from __future__ import annotations
 
-from PySide6.QtCore import QRectF, Qt
-from PySide6.QtGui import QBrush, QColor, QImage, QPainter, QPixmap
+from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, Signal
+from PySide6.QtGui import QBrush, QColor, QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
+    QGraphicsItem,
     QGraphicsPixmapItem,
+    QGraphicsRectItem,
     QGraphicsScene,
     QGraphicsView,
     QWidget,
 )
 
+from croppy.gui.crop_item import CropRectItem
+
+_DRAFT_MIN_SIDE = 6.0
+_DRAFT_BORDER = QColor("#ffaa00")
+
 
 class VideoCanvas(QGraphicsView):
-    """Shows a single video frame and scales it to fit the view.
-
-    Crop-rectangle drawing is added in a later step.
-    """
+    crops_changed = Signal()
+    selection_changed = Signal(object)  # CropRectItem | None
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -29,10 +39,18 @@ class VideoCanvas(QGraphicsView):
             QPainter.RenderHint.Antialiasing | QPainter.RenderHint.SmoothPixmapTransform
         )
         self.setMinimumSize(400, 300)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+
         self._pixmap_item: QGraphicsPixmapItem | None = None
+        self._crops: list[CropRectItem] = []
+        self._draft: QGraphicsRectItem | None = None
+        self._draft_origin: QPointF | None = None
+
+        self._scene.selectionChanged.connect(self._emit_selection)
+
+    # --- public API ---------------------------------------------------------
 
     def set_image(self, image: QImage) -> None:
-        """Replace (or set) the displayed frame."""
         pixmap = QPixmap.fromImage(image)
         if self._pixmap_item is None:
             self._pixmap_item = self._scene.addPixmap(pixmap)
@@ -43,21 +61,126 @@ class VideoCanvas(QGraphicsView):
         self._fit()
 
     def image_size(self) -> tuple[int, int]:
-        """Return ``(width, height)`` of the current frame, or ``(0, 0)``."""
         if self._pixmap_item is None:
             return (0, 0)
         pm = self._pixmap_item.pixmap()
         return (pm.width(), pm.height())
+
+    def crops(self) -> list[CropRectItem]:
+        return list(self._crops)
+
+    def add_crop(self, rect: QRectF) -> CropRectItem:
+        item = CropRectItem(rect, index=len(self._crops))
+        self._scene.addItem(item)
+        item.set_rect(rect)  # re-clamp now that the item has a scene
+        item.delete_requested.connect(lambda i=item: self.remove_crop(i))
+        item.changed.connect(self.crops_changed)
+        self._crops.append(item)
+        self._scene.clearSelection()
+        item.setSelected(True)
+        self.crops_changed.emit()
+        return item
+
+    def remove_crop(self, item: CropRectItem) -> None:
+        if item not in self._crops:
+            return
+        self._scene.removeItem(item)
+        self._crops.remove(item)
+        for idx, remaining in enumerate(self._crops):
+            remaining.set_index(idx)
+        self.crops_changed.emit()
+
+    def select_crop(self, item: CropRectItem | None) -> None:
+        self._scene.clearSelection()
+        if item is not None:
+            item.setSelected(True)
+            item.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def selected_crop(self) -> CropRectItem | None:
+        for it in self._scene.selectedItems():
+            if isinstance(it, CropRectItem):
+                return it
+        return None
+
+    # --- Qt overrides -------------------------------------------------------
+
+    def resizeEvent(self, event) -> None:  # noqa: ANN001
+        super().resizeEvent(event)
+        self._fit()
+
+    def showEvent(self, event) -> None:  # noqa: ANN001
+        super().showEvent(event)
+        self._fit()
+
+    def mousePressEvent(self, event) -> None:  # noqa: ANN001
+        if event.button() == Qt.MouseButton.LeftButton and self._pixmap_item is not None:
+            if self._crop_item_at(event.pos()) is None:
+                self._begin_draft(self.mapToScene(event.pos()))
+                event.accept()
+                return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:  # noqa: ANN001
+        if self._draft is not None and self._draft_origin is not None:
+            cur = self.mapToScene(event.pos())
+            self._draft.setRect(QRectF(self._draft_origin, cur).normalized())
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: ANN001
+        if self._draft is not None:
+            rect = self._draft.rect()
+            self._scene.removeItem(self._draft)
+            self._draft = None
+            self._draft_origin = None
+            if rect.width() >= _DRAFT_MIN_SIDE and rect.height() >= _DRAFT_MIN_SIDE:
+                self.add_crop(rect)
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+    def keyPressEvent(self, event) -> None:  # noqa: ANN001
+        if event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+            removed_any = False
+            for it in list(self._scene.selectedItems()):
+                if isinstance(it, CropRectItem):
+                    self.remove_crop(it)
+                    removed_any = True
+            if removed_any:
+                event.accept()
+                return
+        super().keyPressEvent(event)
+
+    # --- internals ----------------------------------------------------------
 
     def _fit(self) -> None:
         if self._pixmap_item is None:
             return
         self.fitInView(self._pixmap_item, Qt.AspectRatioMode.KeepAspectRatio)
 
-    def resizeEvent(self, event) -> None:  # noqa: ANN001 — Qt override
-        super().resizeEvent(event)
-        self._fit()
+    def _crop_item_at(self, view_pos: QPoint) -> CropRectItem | None:
+        for item in self.items(view_pos):
+            if isinstance(item, CropRectItem):
+                return item
+        return None
 
-    def showEvent(self, event) -> None:  # noqa: ANN001 — Qt override
-        super().showEvent(event)
-        self._fit()
+    def _begin_draft(self, scene_origin: QPointF) -> None:
+        self._draft_origin = scene_origin
+        self._draft = QGraphicsRectItem(QRectF(scene_origin, scene_origin))
+        pen = QPen(_DRAFT_BORDER)
+        pen.setWidthF(2.0)
+        pen.setCosmetic(True)
+        pen.setStyle(Qt.PenStyle.DashLine)
+        self._draft.setPen(pen)
+        fill = QColor(_DRAFT_BORDER)
+        fill.setAlphaF(0.12)
+        self._draft.setBrush(QBrush(fill))
+        self._draft.setFlag(
+            QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False
+        )
+        self._scene.addItem(self._draft)
+        self._scene.clearSelection()
+
+    def _emit_selection(self) -> None:
+        self.selection_changed.emit(self.selected_crop())
