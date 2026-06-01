@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from croppy.config import save_encode_settings, save_parallel_enabled
 from croppy.ffmpeg.probe import VideoInfo
 from croppy.gui.canvas import VideoCanvas
 from croppy.gui.crop_item import CropRectItem
@@ -40,10 +41,14 @@ class EditorWidget(QWidget):
         self,
         info: VideoInfo,
         image: QImage,
+        encode_settings: EncodeSettings | None = None,
+        parallel_enabled: bool = False,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._info = info
+        self._encode_settings = encode_settings or EncodeSettings()
+        self._parallel_enabled = parallel_enabled
         self._syncing_selection = False
         self._build_ui()
         self.canvas.set_image(image)
@@ -169,7 +174,9 @@ class EditorWidget(QWidget):
         v.addWidget(crops_group)
 
         self.settings_section = CollapsibleSection("Encoding settings", expanded=False)
-        self.settings_panel = SettingsPanel()
+        self.settings_panel = SettingsPanel(initial=self._encode_settings)
+        # Persist edits so encoding settings survive across sessions.
+        self.settings_panel.settings_changed.connect(save_encode_settings)
         self.settings_section.add_widget(self.settings_panel)
         v.addWidget(self.settings_section)
 
@@ -183,6 +190,9 @@ class EditorWidget(QWidget):
             "not help on machines with few cores."
         )
         self.parallel_check.setEnabled(workers > 1)
+        self.parallel_check.setChecked(self._parallel_enabled and workers > 1)
+        # Persist the toggle so it survives across sessions.
+        self.parallel_check.toggled.connect(save_parallel_enabled)
         v.addWidget(self.parallel_check)
 
         self.process_btn = QPushButton("Process")

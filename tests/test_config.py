@@ -1,0 +1,52 @@
+"""Tests for QSettings-backed preference persistence."""
+
+from __future__ import annotations
+
+from croppy.config import (
+    load_encode_settings,
+    load_parallel_enabled,
+    save_encode_settings,
+    save_parallel_enabled,
+)
+from croppy.models import EncodeSettings
+
+
+def test_load_returns_defaults_when_empty() -> None:
+    assert load_encode_settings() == EncodeSettings()
+
+
+def test_encode_settings_roundtrip() -> None:
+    custom = EncodeSettings(
+        container="mkv",
+        video_codec="libx265",
+        preset="slow",
+        crf=23,
+        tune="film",
+        pixel_format="yuv444p",
+        audio_mode="aac",
+        audio_bitrate="256k",
+        faststart=False,
+    )
+    save_encode_settings(custom)
+    assert load_encode_settings() == custom
+
+
+def test_parallel_enabled_defaults_off() -> None:
+    assert load_parallel_enabled() is False
+
+
+def test_parallel_enabled_roundtrip() -> None:
+    save_parallel_enabled(True)
+    assert load_parallel_enabled() is True
+    save_parallel_enabled(False)
+    assert load_parallel_enabled() is False
+
+
+def test_partial_settings_fall_back_to_defaults() -> None:
+    # Persist a non-default that differs in just one field; everything else
+    # should come back as the dataclass default.
+    save_encode_settings(EncodeSettings(crf=30))
+    loaded = load_encode_settings()
+    assert loaded.crf == 30
+    assert loaded.preset == EncodeSettings().preset
+    assert loaded.faststart is EncodeSettings().faststart

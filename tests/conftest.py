@@ -6,8 +6,23 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from PySide6.QtCore import QCoreApplication, QSettings
 
 from croppy.ffmpeg.binary import find_ffmpeg
+
+
+@pytest.fixture(autouse=True)
+def _isolate_qsettings(tmp_path: Path) -> None:
+    """Redirect QSettings to a per-test temp dir so persistence tests never
+    read or clobber the real user configuration."""
+    QCoreApplication.setOrganizationName("croppy-test")
+    QCoreApplication.setApplicationName("croppy-test")
+    QSettings.setDefaultFormat(QSettings.Format.IniFormat)
+    QSettings.setPath(
+        QSettings.Format.IniFormat,
+        QSettings.Scope.UserScope,
+        str(tmp_path),
+    )
 
 
 @pytest.fixture(scope="session")

@@ -18,6 +18,8 @@ def run(video: Path | None = None) -> int:
     qt_app = QApplication.instance() or QApplication(sys.argv)
     qt_app.setApplicationName("croppy")
     qt_app.setApplicationDisplayName("croppy")
+    # organizationName completes the QSettings storage path (see croppy.config).
+    qt_app.setOrganizationName("croppy")
 
     window = MainWindow()
     if video is not None:

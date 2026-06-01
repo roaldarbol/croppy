@@ -8,6 +8,7 @@ from loguru import logger
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QDockWidget, QMainWindow, QMessageBox
 
+from croppy.config import load_encode_settings, load_parallel_enabled
 from croppy.ffmpeg.crop import default_output_path
 from croppy.ffmpeg.frame import FrameExtractError, extract_frame
 from croppy.ffmpeg.probe import ProbeError, probe
@@ -60,7 +61,13 @@ class MainWindow(QMainWindow):
             return
 
         self._video_path = path
-        editor = EditorWidget(info, image, parent=self)
+        editor = EditorWidget(
+            info,
+            image,
+            encode_settings=load_encode_settings(),
+            parallel_enabled=load_parallel_enabled(),
+            parent=self,
+        )
         editor.frame_change_requested.connect(self._reload_frame)
         editor.video_change_requested.connect(self.open_video)
         editor.process_requested.connect(self._start_processing)
