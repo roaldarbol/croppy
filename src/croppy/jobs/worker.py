@@ -19,7 +19,7 @@ class Worker(QObject):
     Exactly one of ``finished``, ``failed``, or ``canceled`` is emitted.
     """
 
-    progress = Signal(int, int)  # job_id, microseconds since clip start
+    progress = Signal(int, "qlonglong")  # job_id, microseconds since clip start
     finished = Signal(int)  # job_id
     failed = Signal(int, str)  # job_id, message
     canceled = Signal(int)  # job_id

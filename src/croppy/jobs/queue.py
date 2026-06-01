@@ -17,7 +17,7 @@ class JobQueue(QObject):
     """Owns a FIFO queue of :class:`CropJob` and runs up to ``max_workers`` concurrently."""
 
     job_started = Signal(int)
-    job_progress = Signal(int, int)
+    job_progress = Signal(int, "qlonglong")  # job_id, microseconds since clip start
     job_finished = Signal(int)
     job_failed = Signal(int, str)
     job_canceled = Signal(int)
