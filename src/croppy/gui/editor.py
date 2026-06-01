@@ -7,6 +7,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QImage
 from PySide6.QtWidgets import (
+    QCheckBox,
     QFileDialog,
     QGroupBox,
     QHBoxLayout,
@@ -24,12 +25,15 @@ from PySide6.QtWidgets import (
 from croppy.ffmpeg.probe import VideoInfo
 from croppy.gui.canvas import VideoCanvas
 from croppy.gui.crop_item import CropRectItem
+from croppy.gui.landing import file_dialog_filter
 from croppy.gui.settings_panel import CollapsibleSection, SettingsPanel
+from croppy.jobs.queue import suggested_worker_count
 from croppy.models import CropRegion, EncodeSettings
 
 
 class EditorWidget(QWidget):
     frame_change_requested = Signal(int)
+    video_change_requested = Signal(Path)
     process_requested = Signal()
 
     def __init__(
@@ -67,6 +71,9 @@ class EditorWidget(QWidget):
 
     def encode_settings(self) -> EncodeSettings:
         return self.settings_panel.settings()
+
+    def parallel_enabled(self) -> bool:
+        return self.parallel_check.isChecked()
 
     def output_dir(self) -> Path:
         return Path(self.output_dir_edit.text())
@@ -110,6 +117,34 @@ class EditorWidget(QWidget):
         summary.setTextFormat(Qt.TextFormat.RichText)
         v.addWidget(summary)
 
+        input_group = QGroupBox("Input video")
+        ig = QHBoxLayout(input_group)
+        ig.setContentsMargins(8, 8, 8, 8)
+        ig.setSpacing(6)
+        self.input_path_edit = QLineEdit(str(self._info.path))
+        self.input_path_edit.setReadOnly(True)
+        self.input_path_edit.setToolTip(str(self._info.path))
+        self.input_path_edit.setCursorPosition(0)
+        self.browse_input_btn = QPushButton("Browse…")
+        self.browse_input_btn.clicked.connect(self._browse_input_video)
+        ig.addWidget(self.input_path_edit, 1)
+        ig.addWidget(self.browse_input_btn, 0)
+        v.addWidget(input_group)
+
+        output_group = QGroupBox("Output folder")
+        og = QHBoxLayout(output_group)
+        og.setContentsMargins(8, 8, 8, 8)
+        og.setSpacing(6)
+        self.output_dir_edit = QLineEdit(str(self._info.path.parent))
+        self.output_dir_edit.setReadOnly(True)
+        self.output_dir_edit.setToolTip(str(self._info.path.parent))
+        self.output_dir_edit.setCursorPosition(0)
+        self.browse_output_btn = QPushButton("Browse…")
+        self.browse_output_btn.clicked.connect(self._browse_output_dir)
+        og.addWidget(self.output_dir_edit, 1)
+        og.addWidget(self.browse_output_btn, 0)
+        v.addWidget(output_group)
+
         frame_group = QGroupBox("Preview frame")
         fl = QHBoxLayout(frame_group)
         self.frame_spin = QSpinBox()
@@ -133,26 +168,22 @@ class EditorWidget(QWidget):
         cl.addWidget(self.empty_label)
         v.addWidget(crops_group)
 
-        output_group = QGroupBox("Output folder")
-        og = QHBoxLayout(output_group)
-        og.setContentsMargins(8, 8, 8, 8)
-        og.setSpacing(6)
-        self.output_dir_edit = QLineEdit(str(self._info.path.parent))
-        self.output_dir_edit.setReadOnly(True)
-        self.output_dir_edit.setToolTip(str(self._info.path.parent))
-        self.output_dir_edit.setCursorPosition(0)
-        self.browse_output_btn = QPushButton("Browse…")
-        self.browse_output_btn.clicked.connect(self._browse_output_dir)
-        og.addWidget(self.output_dir_edit, 1)
-        og.addWidget(self.browse_output_btn, 0)
-        v.addWidget(output_group)
-
         self.settings_section = CollapsibleSection("Encoding settings", expanded=False)
         self.settings_panel = SettingsPanel()
         self.settings_section.add_widget(self.settings_panel)
         v.addWidget(self.settings_section)
 
         v.addStretch(1)
+
+        workers = suggested_worker_count()
+        self.parallel_check = QCheckBox(f"Parallel processing (up to {workers} at once)")
+        self.parallel_check.setToolTip(
+            "Process multiple crops at the same time using available CPU cores.\n"
+            "ffmpeg is already multi-threaded, so the speed-up is modest and may\n"
+            "not help on machines with few cores."
+        )
+        self.parallel_check.setEnabled(workers > 1)
+        v.addWidget(self.parallel_check)
 
         self.process_btn = QPushButton("Process")
         self.process_btn.setEnabled(False)
@@ -208,6 +239,16 @@ class EditorWidget(QWidget):
             self.canvas.select_crop(target)
         finally:
             self._syncing_selection = False
+
+    def _browse_input_video(self) -> None:
+        path_str, _ = QFileDialog.getOpenFileName(
+            self,
+            "Choose input video",
+            str(self._info.path.parent),
+            file_dialog_filter(),
+        )
+        if path_str:
+            self.video_change_requested.emit(Path(path_str))
 
     def _browse_output_dir(self) -> None:
         chosen = QFileDialog.getExistingDirectory(

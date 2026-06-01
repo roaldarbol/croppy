@@ -9,7 +9,7 @@ import pytest
 from croppy.ffmpeg.crop import default_output_path
 from croppy.ffmpeg.probe import probe
 from croppy.jobs.job import CropJob, JobState
-from croppy.jobs.queue import JobQueue
+from croppy.jobs.queue import JobQueue, suggested_worker_count
 from croppy.models import CropRegion, EncodeSettings
 
 
@@ -85,6 +85,58 @@ def test_queue_cancel_pending_emits_canceled(qtbot, qapp, test_video: Path, tmp_
     # Let j1 finish so the test process exits cleanly
     with qtbot.waitSignal(queue.job_finished, timeout=30000):
         pass
+
+
+def test_queue_runs_two_jobs_in_parallel(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
+    j1 = _make_job(test_video, tmp_path / "a.mp4")
+    j2 = _make_job(test_video, tmp_path / "b.mp4")
+    queue = JobQueue(max_workers=2)
+    started: list[int] = []
+    queue.job_started.connect(lambda jid: started.append(jid))
+
+    finished: list[int] = []
+    queue.job_finished.connect(lambda jid: finished.append(jid))
+
+    queue.submit(j1)
+    queue.submit(j2)
+    # With two workers, both jobs start immediately — neither waits for the other.
+    assert started == [j1.id, j2.id]
+    assert len(queue._active) == 2
+
+    qtbot.waitUntil(lambda: len(finished) == 2, timeout=30000)
+    assert set(finished) == {j1.id, j2.id}
+    assert j1.state == JobState.DONE
+    assert j2.state == JobState.DONE
+
+
+def test_set_max_workers_starts_pending_job(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
+    j1 = _make_job(test_video, tmp_path / "a.mp4")
+    j2 = _make_job(test_video, tmp_path / "b.mp4")
+    queue = JobQueue(max_workers=1)
+    started: list[int] = []
+    finished: list[int] = []
+    queue.job_started.connect(lambda jid: started.append(jid))
+    queue.job_finished.connect(lambda jid: finished.append(jid))
+
+    queue.submit(j1)
+    queue.submit(j2)
+    assert started == [j1.id]  # j2 held back at max_workers=1
+
+    # Raising the cap should release the pending job without waiting.
+    queue.set_max_workers(2)
+    assert started == [j1.id, j2.id]
+
+    qtbot.waitUntil(lambda: len(finished) == 2, timeout=30000)
+
+
+def test_set_max_workers_rejects_zero() -> None:
+    queue = JobQueue()
+    with pytest.raises(ValueError):
+        queue.set_max_workers(0)
+
+
+def test_suggested_worker_count_is_at_least_one() -> None:
+    assert suggested_worker_count() >= 1
 
 
 def test_queue_invalid_max_workers() -> None:

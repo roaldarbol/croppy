@@ -15,7 +15,7 @@ from croppy.gui.editor import EditorWidget
 from croppy.gui.landing import LandingWidget
 from croppy.gui.progress_panel import ProgressPanel
 from croppy.jobs.job import CropJob
-from croppy.jobs.queue import JobQueue
+from croppy.jobs.queue import JobQueue, suggested_worker_count
 
 
 class MainWindow(QMainWindow):
@@ -62,6 +62,7 @@ class MainWindow(QMainWindow):
         self._video_path = path
         editor = EditorWidget(info, image, parent=self)
         editor.frame_change_requested.connect(self._reload_frame)
+        editor.video_change_requested.connect(self.open_video)
         editor.process_requested.connect(self._start_processing)
         self._editor = editor
         self.setCentralWidget(editor)
@@ -93,6 +94,8 @@ class MainWindow(QMainWindow):
         settings = self._editor.encode_settings()
         info = self._editor.info()
         output_dir = self._editor.output_dir()
+        workers = suggested_worker_count() if self._editor.parallel_enabled() else 1
+        self._queue.set_max_workers(workers)
         for index, region in enumerate(regions):
             output_path = default_output_path(
                 self._video_path,

@@ -1,7 +1,8 @@
-"""Sequential job queue. Designed so ``max_workers > 1`` enables parallel later."""
+"""Job queue. ``max_workers > 1`` runs crops concurrently."""
 
 from __future__ import annotations
 
+import os
 from collections import deque
 
 from loguru import logger
@@ -11,6 +12,17 @@ from croppy.jobs.job import CropJob, JobState
 from croppy.jobs.worker import Worker
 
 DEFAULT_MAX_WORKERS = 1
+
+
+def suggested_worker_count() -> int:
+    """A conservative parallel-job count for this machine.
+
+    ffmpeg is itself multi-threaded, so we stay well below the core count to
+    fill only the headroom a single encode leaves rather than oversubscribing
+    the CPU. Always at least 1.
+    """
+    cores = os.cpu_count() or 1
+    return max(1, min(4, cores // 2))
 
 
 class JobQueue(QObject):
@@ -58,6 +70,14 @@ class JobQueue(QObject):
                 logger.info("Canceled pending job {}", job_id)
                 self.job_canceled.emit(job_id)
                 return
+
+    def set_max_workers(self, n: int) -> None:
+        """Change how many jobs may run at once. Raising it can immediately
+        start more pending jobs; lowering it only affects future starts."""
+        if n < 1:
+            raise ValueError("max_workers must be >= 1")
+        self._max_workers = n
+        self._maybe_start_next()
 
     def jobs(self) -> list[CropJob]:
         return list(self._jobs.values())
