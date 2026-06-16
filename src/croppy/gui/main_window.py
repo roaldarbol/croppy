@@ -13,6 +13,7 @@ from croppy.gui.compress_tab import CompressTab
 from croppy.gui.compression_panel import CompressionController
 from croppy.gui.crop_tab import CropTab
 from croppy.gui.jobs_panel import JobsPanel
+from croppy.gui.settings_tab import SettingsTab
 from croppy.gui.status_strip import StatusStrip
 from croppy.jobs.queue import JobQueue, suggested_worker_count
 
@@ -36,10 +37,12 @@ class MainWindow(QMainWindow):
         self.compress_tab = CompressTab(self._controller, self._queue)
         self.jobs_panel = JobsPanel(self._queue, parallel_enabled=parallel)
         self.jobs_panel.parallel_toggled.connect(self._on_parallel_toggled)
+        self.settings_tab = SettingsTab(self._controller)
         self.tabs.addTab(self.crop_tab, "Crop")
         self.tabs.addTab(self.combine_tab, "Combine")
         self.tabs.addTab(self.compress_tab, "Compress")
         self.tabs.addTab(self.jobs_panel, "Jobs")
+        self.tabs.addTab(self.settings_tab, "Settings")
         self.setCentralWidget(self.tabs)
 
         # Always-visible bottom strip summarizing the queue.

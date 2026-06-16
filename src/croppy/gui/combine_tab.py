@@ -77,7 +77,7 @@ class CombineTab(QWidget):
         self.output_picker = OutputFolderPicker(with_filename=True, default_filename="combined.mp4")
         v.addWidget(self.output_picker)
 
-        self.compression = CompressionPanel(controller)
+        self.compression = CompressionPanel(initial=controller.default(), controller=controller)
         v.addWidget(self.compression)
 
         v.addStretch(1)

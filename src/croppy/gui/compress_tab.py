@@ -69,7 +69,7 @@ class CompressTab(QWidget):
         self.output_picker = OutputFolderPicker()
         v.addWidget(self.output_picker)
 
-        self.compression = CompressionPanel(controller)
+        self.compression = CompressionPanel(initial=controller.default(), controller=controller)
         v.addWidget(self.compression)
 
         v.addStretch(1)

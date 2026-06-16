@@ -108,7 +108,7 @@ class EditorWidget(QWidget):
         ]
 
     def encode_settings(self) -> EncodeSettings:
-        return self._controller.settings()
+        return self.compression.settings()
 
     def output_dir(self) -> Path:
         return self.output_picker.output_dir()
@@ -186,7 +186,9 @@ class EditorWidget(QWidget):
         cl.addWidget(self.empty_label)
         v.addWidget(crops_group)
 
-        self.compression = CompressionPanel(self._controller)
+        self.compression = CompressionPanel(
+            initial=self._controller.default(), controller=self._controller
+        )
         v.addWidget(self.compression)
 
         v.addStretch(1)

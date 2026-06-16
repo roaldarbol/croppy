@@ -83,8 +83,9 @@ def test_main_window_writes_to_chosen_output_dir(
 
     window = MainWindow()
     qtbot.addWidget(window)
-    # Pin a fast CPU encoder so the test doesn't depend on a working GPU.
-    window._controller.set_settings(EncodeSettings(encoder="libx264", preset="ultrafast"))
+    # Pin a fast CPU encoder so the test doesn't depend on a working GPU. The
+    # crop tab's (pristine) compression panel follows the default.
+    window._controller.set_default(EncodeSettings(encoder="libx264", preset="ultrafast"))
     window.open_video(local)
     editor = window.crop_tab._editor
     assert editor is not None
