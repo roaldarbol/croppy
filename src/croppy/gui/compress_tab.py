@@ -102,7 +102,7 @@ class CompressTab(QWidget):
 
         v.addStretch(1)
 
-        self.queue_btn = QPushButton("Add compress jobs to queue")
+        self.queue_btn = QPushButton("Add Job to Queue")
         self.queue_btn.setEnabled(False)
         self.queue_btn.clicked.connect(self._queue_jobs)
         v.addWidget(self.queue_btn)

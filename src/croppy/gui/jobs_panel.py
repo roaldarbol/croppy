@@ -165,7 +165,8 @@ class JobsPanel(QWidget):
 
         self._empty = QLabel("No jobs yet. Add some from the Crop, Combine, or Compress tab.")
         self._empty.setStyleSheet("color: #888;")
-        outer.addWidget(self._empty)
+        self._empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        outer.addWidget(self._empty, 1)
 
         self._scroll = QScrollArea()
         self._scroll.setWidgetResizable(True)

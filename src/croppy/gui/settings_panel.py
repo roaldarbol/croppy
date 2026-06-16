@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFormLayout,
+    QLabel,
     QSizePolicy,
     QSpinBox,
     QToolButton,
@@ -138,73 +139,122 @@ class SettingsPanel(QWidget):
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
         form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.DontWrapRows)
 
+        def add_row(label_text: str, field: QWidget, tip: str) -> None:
+            # Put the help on both the label and the field so hovering either shows it.
+            field.setToolTip(tip)
+            label = QLabel(label_text)
+            label.setToolTip(tip)
+            form.addRow(label, field)
+
         self.container_combo = QComboBox()
         self.container_combo.addItems(CONTAINERS)
-        self.container_combo.setToolTip("Output file container.")
-        form.addRow("Container:", self.container_combo)
+        add_row(
+            "Container:",
+            self.container_combo,
+            "The output file type.\n"
+            "• mp4 — plays almost everywhere (best default)\n"
+            "• mkv — flexible, good for archiving\n"
+            "• mov — common on Macs",
+        )
 
         self.encoder_combo = QComboBox()
         for label, value in ENCODERS_UI:
             self.encoder_combo.addItem(label, value)
-        self.encoder_combo.setToolTip(
-            "Auto uses NVENC HEVC on the GPU when available, else CPU libx265.\n"
-            "Choose an explicit encoder to force GPU or CPU."
+        add_row(
+            "Encoder:",
+            self.encoder_combo,
+            "How the video is compressed (the codec).\n"
+            "• Auto — uses your graphics card (NVENC) when available for fast\n"
+            "  encoding, otherwise the CPU. A good default.\n"
+            "• NVENC HEVC — force the GPU; smaller files\n"
+            "• CPU libx265 — smaller files, slower\n"
+            "• CPU libx264 — the most compatible, plays anywhere",
         )
-        form.addRow("Encoder:", self.encoder_combo)
 
         # NVENC (GPU) quality
         self.cq_spin = QSpinBox()
         self.cq_spin.setRange(0, 51)
-        self.cq_spin.setToolTip("NVENC constant quality: lower = better/larger (~28 web-grade).")
-        form.addRow("NVENC CQ:", self.cq_spin)
+        add_row(
+            "NVENC CQ:",
+            self.cq_spin,
+            "Quality for GPU encoding. Lower number = better quality, bigger file.\n"
+            "~23 looks great · ~28 is fine for sharing.\n"
+            "(Used by the Auto / NVENC encoders.)",
+        )
 
         self.nvenc_preset_combo = QComboBox()
         self.nvenc_preset_combo.addItems(NVENC_PRESETS)
-        self.nvenc_preset_combo.setToolTip("NVENC preset: p1 fastest … p7 best quality.")
-        form.addRow("NVENC preset:", self.nvenc_preset_combo)
+        add_row(
+            "NVENC preset:",
+            self.nvenc_preset_combo,
+            "GPU effort. p1 is fastest, p7 gives the best quality (a bit slower).\n"
+            "p7 is a good default.",
+        )
 
         # CPU (libx264/libx265) quality
         self.crf_spin = QSpinBox()
         self.crf_spin.setRange(0, 51)
-        self.crf_spin.setToolTip(
-            "CPU CRF: 0 = lossless, ~18 visually lossless, ~23 default, ~28 web-grade."
+        add_row(
+            "CPU CRF:",
+            self.crf_spin,
+            "Quality for CPU encoding. Lower number = better quality, bigger file.\n"
+            "18 ≈ looks the same as the original · 23 is a good default ·\n"
+            "28 is fine for sharing.",
         )
-        form.addRow("CPU CRF:", self.crf_spin)
 
         self.preset_combo = QComboBox()
         self.preset_combo.addItems(PRESETS)
-        self.preset_combo.setToolTip("CPU preset: slower compresses better but takes longer.")
-        form.addRow("CPU preset:", self.preset_combo)
+        add_row(
+            "CPU preset:",
+            self.preset_combo,
+            "CPU effort. Slower presets make slightly smaller files but take\n"
+            "longer to encode. 'medium' is a good balance.",
+        )
 
         self.tune_combo = QComboBox()
         self.tune_combo.addItems(TUNES_UI)
-        self.tune_combo.setToolTip(
-            "Optional CPU content-type hint (e.g. film, animation). 'none' = no tune."
+        add_row(
+            "CPU tune:",
+            self.tune_combo,
+            "Optional hint about the footage (e.g. film, animation) for a little\n"
+            "extra quality. Leave as 'none' if you're not sure.",
         )
-        form.addRow("CPU tune:", self.tune_combo)
 
         self.pixfmt_combo = QComboBox()
         self.pixfmt_combo.addItems(PIXEL_FORMATS)
-        self.pixfmt_combo.setToolTip(
-            "CPU pixel format: yuv420p = broadest player support; 422/444 keep more chroma."
+        add_row(
+            "CPU pixel format:",
+            self.pixfmt_combo,
+            "How colour is stored. Leave as yuv420p — it plays everywhere.\n"
+            "422/444 keep more colour detail but some players can't open them.",
         )
-        form.addRow("CPU pixel format:", self.pixfmt_combo)
 
         self.audio_combo = QComboBox()
         self.audio_combo.addItems(AUDIO_MODES)
-        self.audio_combo.setToolTip("copy = stream the original audio; aac = re-encode.")
-        form.addRow("Audio:", self.audio_combo)
+        add_row(
+            "Audio:",
+            self.audio_combo,
+            "What to do with the sound.\n"
+            "• copy — keep the original audio untouched (fastest)\n"
+            "• aac — re-encode the audio (e.g. to make it smaller)",
+        )
 
         self.audio_bitrate_combo = QComboBox()
         self.audio_bitrate_combo.addItems(AUDIO_BITRATES)
-        self.audio_bitrate_combo.setToolTip("Only used when audio mode is 'aac'.")
-        form.addRow("Audio bitrate:", self.audio_bitrate_combo)
+        add_row(
+            "Audio bitrate:",
+            self.audio_bitrate_combo,
+            "Sound quality when re-encoding. Higher = better sound, bigger file.\n"
+            "192k suits most videos. (Only used when Audio is 'aac'.)",
+        )
 
         self.faststart_check = QCheckBox("Move metadata to front (mp4/mov)")
-        self.faststart_check.setToolTip(
-            "Adds -movflags +faststart. Improves streamability for web playback."
+        add_row(
+            "Faststart:",
+            self.faststart_check,
+            "Lets a video start playing in a web browser before it has fully\n"
+            "downloaded. Useful for mp4/mov shared online.",
         )
-        form.addRow("Faststart:", self.faststart_check)
 
         # Give every input the same width so the column lines up tidily.
         for field in (

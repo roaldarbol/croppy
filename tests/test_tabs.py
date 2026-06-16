@@ -36,7 +36,7 @@ def test_combine_group_queues_one_job(qtbot, qapp, test_video: Path, tmp_path: P
     out_dir = tmp_path / "out"
     out_dir.mkdir()
     tab.output_picker.set_output_dir(out_dir)
-    tab.output_picker.set_filename("joined.mp4")
+    tab.current_group().name = "joined"  # the group name is the output file name
 
     assert tab.queue_btn.isEnabled()
     tab._queue_all()
@@ -50,17 +50,29 @@ def test_combine_group_queues_one_job(qtbot, qapp, test_video: Path, tmp_path: P
     assert tab.video_list.count() == 3
 
 
-def test_combine_forces_mp4_extension(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
+def test_combine_group_name_becomes_mp4(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
     queue = MagicMock()
     queue.jobs.return_value = []
     tab = CombineTab(CompressionController(), queue)
     qtbot.addWidget(tab)
     tab.video_list.add_paths(_copies(test_video, tmp_path, 2))
     tab.output_picker.set_output_dir(tmp_path)
-    tab.output_picker.set_filename("myclip")  # no extension
+    # A plain name and a name that already ends in .mp4 both yield one .mp4.
+    tab.current_group().name = "myclip"
     tab._queue_all()
-    job = queue.submit.call_args[0][0]
-    assert job.output_path.name == "myclip.mp4"
+    assert queue.submit.call_args[0][0].output_path.name == "myclip.mp4"
+    tab.current_group().name = "myclip.mp4"
+    tab._queue_all()
+    assert queue.submit.call_args[0][0].output_path.name == "myclip.mp4"
+
+
+def test_combine_group_renamed_inline(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
+    queue = MagicMock()
+    tab = CombineTab(CompressionController(), queue)
+    qtbot.addWidget(tab)
+    # Editing the list item (file-explorer style) updates the group name.
+    tab.groups_list.currentItem().setText("Day 1")
+    assert tab.current_group().name == "Day 1"
 
 
 def test_combine_needs_two_videos(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
@@ -79,7 +91,7 @@ def test_combine_multiple_groups(qtbot, qapp, test_video: Path, tmp_path: Path) 
 
     # Group 1
     tab.video_list.add_paths(_copies(test_video, tmp_path, 2))
-    tab.output_picker.set_filename("first.mp4")
+    tab.current_group().name = "first"
     # Group 2
     tab._add_group(select=True)
     g2 = tmp_path / "g2"
@@ -87,7 +99,7 @@ def test_combine_multiple_groups(qtbot, qapp, test_video: Path, tmp_path: Path) 
     (g2 / "x.mp4").write_bytes((tmp_path / "clip0.mp4").read_bytes())
     (g2 / "y.mp4").write_bytes((tmp_path / "clip0.mp4").read_bytes())
     tab.video_list.add_paths([g2 / "x.mp4", g2 / "y.mp4"])
-    tab.output_picker.set_filename("second.mp4")
+    tab.current_group().name = "second"
 
     assert len(tab._groups) == 2
     tab._queue_all()

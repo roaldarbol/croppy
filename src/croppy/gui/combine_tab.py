@@ -1,8 +1,9 @@
 """Combine tab: concatenate ordered videos into one file — with groups.
 
 Each *group* is one join: an ordered set of videos plus its own output name and
-compression. Multiple groups can be staged at once; "Add all groups to queue"
-submits one CombineJob per ready group.
+compression. Rename a group inline in the Groups list (double-click / F2); its
+name is the output file name. "Add Job to Queue" submits one CombineJob per
+ready group.
 """
 
 from __future__ import annotations
@@ -13,9 +14,11 @@ from pathlib import Path
 from loguru import logger
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QHBoxLayout,
     QLabel,
     QListWidget,
+    QListWidgetItem,
     QMessageBox,
     QPushButton,
     QSplitter,
@@ -58,8 +61,8 @@ class _Group:
 
     video_list: VideoList
     settings: EncodeSettings
+    name: str = "Group 1"
     output_dir: Path | None = None
-    filename: str = "combined.mp4"
 
 
 class CombineTab(QWidget):
@@ -81,13 +84,19 @@ class CombineTab(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         splitter = QSplitter(Qt.Orientation.Horizontal, self)
 
-        # --- left: the groups list ---
+        # --- left: the groups list (rename inline like a file explorer) ---
         groups_panel = QWidget(splitter)
         gp = QVBoxLayout(groups_panel)
         gp.setContentsMargins(8, 8, 8, 8)
         gp.addWidget(QLabel("<b>Groups</b>"))
         self.groups_list = QListWidget()
+        self.groups_list.setEditTriggers(
+            QAbstractItemView.EditTrigger.DoubleClicked
+            | QAbstractItemView.EditTrigger.EditKeyPressed
+            | QAbstractItemView.EditTrigger.SelectedClicked
+        )
         self.groups_list.currentRowChanged.connect(self._on_group_selected)
+        self.groups_list.itemChanged.connect(self._on_group_renamed)
         gp.addWidget(self.groups_list, 1)
         gb = QHBoxLayout()
         self.new_group_btn = QPushButton("New group")
@@ -109,13 +118,14 @@ class CombineTab(QWidget):
         v.setSpacing(12)
         hint = QLabel(
             "Each group is one join. Add two or more videos and drag to set the "
-            "order; they are joined top-to-bottom into one file."
+            "order; they are joined top-to-bottom into one file. Double-click a "
+            "group to rename it — the name is the output file."
         )
         hint.setWordWrap(True)
         hint.setStyleSheet("color: #888;")
         v.addWidget(hint)
 
-        self.output_picker = OutputFolderPicker(with_filename=True, default_filename="combined.mp4")
+        self.output_picker = OutputFolderPicker()
         self.output_picker.changed.connect(self._save_current_output)
         v.addWidget(self.output_picker)
 
@@ -124,7 +134,7 @@ class CombineTab(QWidget):
         v.addWidget(self.compression)
 
         v.addStretch(1)
-        self.queue_btn = QPushButton("Add all groups to queue")
+        self.queue_btn = QPushButton("Add Job to Queue")
         self.queue_btn.setEnabled(False)
         self.queue_btn.clicked.connect(self._queue_all)
         v.addWidget(self.queue_btn)
@@ -156,12 +166,13 @@ class CombineTab(QWidget):
         vlist = VideoList()
         vlist.changed.connect(self._on_videos_changed)
         self.stack.addWidget(vlist)
-        n = len(self._groups) + 1
-        filename = "combined.mp4" if n == 1 else f"combined-{n}.mp4"
+        name = f"Group {len(self._groups) + 1}"
         self._groups.append(
-            _Group(video_list=vlist, settings=self._controller.default(), filename=filename)
+            _Group(video_list=vlist, settings=self._controller.default(), name=name)
         )
-        self.groups_list.addItem(filename)
+        item = QListWidgetItem(name)
+        item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)
+        self.groups_list.addItem(item)
         self.del_group_btn.setEnabled(len(self._groups) > 1)
         if select:
             self.groups_list.setCurrentRow(len(self._groups) - 1)
@@ -184,7 +195,6 @@ class CombineTab(QWidget):
         self.stack.setCurrentWidget(group.video_list)
         self._loading = True
         try:
-            self.output_picker.set_filename(group.filename)
             if group.output_dir is not None:
                 self.output_picker.set_output_dir(group.output_dir)
             else:
@@ -193,15 +203,26 @@ class CombineTab(QWidget):
         finally:
             self._loading = False
 
+    def _on_group_renamed(self, item: QListWidgetItem) -> None:
+        row = self.groups_list.row(item)
+        if row < 0 or row >= len(self._groups):
+            return
+        name = item.text().strip()
+        if not name:
+            name = f"Group {row + 1}"
+            self.groups_list.blockSignals(True)
+            item.setText(name)
+            self.groups_list.blockSignals(False)
+        self._groups[row].name = name
+
     # --- state sync ---------------------------------------------------------
 
     def _save_current_output(self) -> None:
         if self._loading:
             return
-        group = self.current_group()
-        group.filename = self.output_picker.filename() or "combined.mp4"
-        group.output_dir = self.output_picker.output_dir() if self.output_picker.has_dir() else None
-        self.groups_list.item(self.groups_list.currentRow()).setText(group.filename)
+        self.current_group().output_dir = (
+            self.output_picker.output_dir() if self.output_picker.has_dir() else None
+        )
 
     def _save_current_settings(self, settings: EncodeSettings) -> None:
         if self._loading:
@@ -232,8 +253,7 @@ class CombineTab(QWidget):
         ready = [g for g in self._groups if g.video_list.count() >= 2]
         if not ready:
             return
-        missing_dir = [g for g in ready if g.output_dir is None]
-        if missing_dir:
+        if any(g.output_dir is None for g in ready):
             QMessageBox.warning(
                 self, "croppy", "Every group needs an output folder before queueing."
             )
@@ -241,10 +261,10 @@ class CombineTab(QWidget):
 
         taken = {job.output_path for job in self._queue.jobs()}
         for group in ready:
-            name = group.filename or "combined.mp4"
-            if not name.lower().endswith(".mp4"):
-                name = f"{Path(name).stem}.mp4"
-            output_path = _unique_path(group.output_dir / name, taken)
+            stem = group.name.strip() or "combined"
+            if stem.lower().endswith(".mp4"):
+                stem = stem[:-4]
+            output_path = _unique_path(group.output_dir / f"{stem}.mp4", taken)
             taken.add(output_path)
             paths = group.video_list.paths()
             job = CombineJob(
