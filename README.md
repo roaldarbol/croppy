@@ -1,19 +1,23 @@
 # croppy
 
-Crop videos visually. Draw boxes on a frame, hit a button, get one cropped file per box.
+Common lab video chores — cropping, joining, and compressing — in one window, the parts ffmpeg handles in a handful of flags nobody wants to type by hand.
 
-croppy exists for the case ffmpeg handles in five command-line flags but no one wants to type by hand: extracting one or more rectangular regions from a video. Drag your clip onto the window, draw the boxes you want on the preview frame, optionally tweak the quality settings, and hit **Process**. croppy spawns one ffmpeg job per box, encodes them in sequence, and shows you a progress panel you can watch and cancel from.
+croppy is organized into three tabs that share one **Compression** panel and one progress dock at the bottom you can watch and cancel from:
 
-Defaults are picked so most people can ignore the settings panel entirely: H.264 video, even-aligned crop dimensions (libx264 is fussy about odd numbers), audio passthrough, `.mp4` output. The settings panel is there for the times you need something else.
+- **Crop** — draw one or more boxes on a preview frame and get one cropped file per box.
+- **Combine** — pick videos, drag them into the order you want, and join them into a single file. Queue as many combine jobs as you like.
+- **Compress** — pick any number of videos and re-encode them smaller in one go.
+
+Compression settings are shared across all three tabs: set them once and every operation uses them. By default croppy encodes with **NVENC HEVC on the GPU when it's available** and falls back to CPU **libx265** otherwise, so files shrink without you choosing an encoder — but the panel lets you force GPU or CPU and tune quality.
 
 ## What you can do
 
-- Open a video by drag-and-drop or via the file picker
-- Pick which frame to use as the preview — handy when a clip starts on black
-- Draw multiple crop rectangles, resize them with corner/edge handles, drag the body to reposition
-- Overlap them freely; each one is an independent output
-- Watch each crop encode in real time and cancel any job mid-flight
-- Set the output folder, container (`mp4` / `mkv` / `mov`), video codec (`libx264` / `libx265`), CRF, preset, tune, pixel format, audio mode, audio bitrate, and faststart from a collapsible **Encoding settings** panel
+- **Crop**: open a video by drag-and-drop or the file picker; pick the preview frame (handy when a clip starts on black); draw, resize (corner/edge handles), and reposition multiple boxes; each box is an independent output.
+- **Combine**: add videos, drag-reorder them, set the output folder and name, and queue a join. Joins are written as fragmented mp4 to a `.partial.mp4` and renamed only on success, so an interrupted run leaves a playable, clearly-partial file.
+- **Compress**: add videos and queue one compress job each; outputs are named `<name>_compressed.mp4`.
+- Watch every job (from any tab) encode in real time in the shared progress dock and cancel any of them mid-flight.
+- Run several jobs at once with the **Parallel** toggle in the progress dock — useful for keeping an NVENC GPU's encode engines busy.
+- Tune the shared **Compression** panel: container (`mp4` / `mkv` / `mov`), encoder (Auto / NVENC HEVC / CPU libx265 / CPU libx264), NVENC CQ + preset, CPU CRF + preset + tune + pixel format, audio mode, audio bitrate, and faststart.
 
 ## Install
 
@@ -36,28 +40,32 @@ pixi run croppy
 ## Using it
 
 ```bash
-croppy                    # opens the landing screen — drop a video or click to browse
-croppy path/to/clip.mp4   # opens straight into the editor with that clip loaded
+croppy                    # opens on the Crop tab — drop a video or click to browse
+croppy path/to/clip.mp4   # opens the Crop tab straight into the editor with that clip
 ```
 
-Once a video is open:
+On the **Crop** tab, once a video is open:
 
 - **Click-and-drag** on the frame to draw a crop box.
 - **Click a box** to select it; its handles appear. Drag the body to move it, drag a handle to resize. The selected box is also highlighted in the sidebar list (and vice-versa).
 - **Delete** or **Backspace** removes the selected box.
 - **Reload** in the *Preview frame* group re-extracts the preview at a different frame number — useful for finding a representative moment.
-- **Process** queues one ffmpeg job per box. The progress dock appears at the bottom of the window with a row per job: progress bar, status, **Cancel** button. **Clear finished** tidies completed rows away when you're done.
+- **Process** queues one ffmpeg job per box. Outputs are named `<original_stem>_crop1.<ext>`, `_crop2.<ext>`, …
 
-Output files land in the folder shown under **Output folder** (the source video's directory by default) and are named `<original_stem>_crop1.<ext>`, `_crop2.<ext>`, and so on.
+On the **Combine** and **Compress** tabs, **Add videos…** to build a list (each row shows a thumbnail), drag to reorder, select rows and **Remove selected** or press Delete to prune. Combine joins the list into one file in the order shown; Compress queues one job per video. Both let you choose an **Output folder** (Combine also takes a file name).
+
+Every job, whatever tab it came from, shows up in the progress dock at the bottom — progress bar, status, **Cancel** — and **Clear finished** tidies completed rows away.
 
 ## Contributing
 
 The codebase is small and meant to stay readable. Layout:
 
 ```text
-src/croppy/ffmpeg/   # subprocess wrappers around ffmpeg / ffprobe (no Qt here)
-src/croppy/gui/      # PySide6 widgets
-src/croppy/jobs/     # job queue + per-job QProcess worker
+src/croppy/ffmpeg/   # subprocess wrappers around ffmpeg / ffprobe (no Qt here):
+                     #   encoder.py (NVENC/CPU args), crop.py, compress.py, combine.py
+src/croppy/gui/      # PySide6 widgets: one tab per operation + shared
+                     #   CompressionPanel, VideoList, OutputFolderPicker, progress dock
+src/croppy/jobs/     # job queue + per-job QProcess worker; Job has crop/compress/combine variants
 src/croppy/models.py # CropRegion, EncodeSettings — plain dataclasses
 ```
 
