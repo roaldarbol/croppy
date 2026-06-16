@@ -13,6 +13,7 @@ from croppy.ffmpeg.frame import extract_frame
 from croppy.ffmpeg.probe import probe
 from croppy.gui.editor import EditorWidget
 from croppy.gui.main_window import MainWindow
+from croppy.models import EncodeSettings
 
 
 def test_output_dir_defaults_to_input_parent(qtbot, qapp, test_video: Path) -> None:
@@ -32,8 +33,8 @@ def test_set_output_dir_updates_field_and_tooltip(
     qtbot.addWidget(editor)
     editor.set_output_dir(tmp_path)
     assert editor.output_dir() == tmp_path
-    assert editor.output_dir_edit.text() == str(tmp_path)
-    assert editor.output_dir_edit.toolTip() == str(tmp_path)
+    assert editor.output_picker.dir_edit.text() == str(tmp_path)
+    assert editor.output_picker.dir_edit.toolTip() == str(tmp_path)
 
 
 def test_browse_button_invokes_dialog(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
@@ -42,10 +43,10 @@ def test_browse_button_invokes_dialog(qtbot, qapp, test_video: Path, tmp_path: P
     editor = EditorWidget(info, image)
     qtbot.addWidget(editor)
     with patch(
-        "croppy.gui.editor.QFileDialog.getExistingDirectory",
+        "croppy.gui.output_picker.QFileDialog.getExistingDirectory",
         return_value=str(tmp_path),
     ):
-        editor.browse_output_btn.click()
+        editor.output_picker.browse_btn.click()
     assert editor.output_dir() == tmp_path
 
 
@@ -56,10 +57,10 @@ def test_browse_cancel_keeps_current(qtbot, qapp, test_video: Path) -> None:
     qtbot.addWidget(editor)
     original = editor.output_dir()
     with patch(
-        "croppy.gui.editor.QFileDialog.getExistingDirectory",
+        "croppy.gui.output_picker.QFileDialog.getExistingDirectory",
         return_value="",
     ):
-        editor.browse_output_btn.click()
+        editor.output_picker.browse_btn.click()
     assert editor.output_dir() == original
 
 
@@ -82,8 +83,10 @@ def test_main_window_writes_to_chosen_output_dir(
 
     window = MainWindow()
     qtbot.addWidget(window)
+    # Pin a fast CPU encoder so the test doesn't depend on a working GPU.
+    window._controller.set_settings(EncodeSettings(encoder="libx264", preset="ultrafast"))
     window.open_video(local)
-    editor = window._editor
+    editor = window.crop_tab._editor
     assert editor is not None
 
     editor.set_output_dir(out_dir)

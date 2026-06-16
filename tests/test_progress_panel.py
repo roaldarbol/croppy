@@ -121,8 +121,10 @@ def test_main_window_process_end_to_end(qtbot, qapp, test_video: Path, tmp_path:
 
     window = MainWindow()
     qtbot.addWidget(window)
+    # Pin a fast CPU encoder so the test doesn't depend on a working GPU.
+    window._controller.set_settings(EncodeSettings(encoder="libx264", preset="ultrafast"))
     window.open_video(local)
-    editor = window._editor
+    editor = window.crop_tab._editor
     assert editor is not None
     editor.canvas.add_crop(QRectF(0, 0, 120, 100))
     assert editor.process_btn.isEnabled()

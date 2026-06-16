@@ -7,7 +7,6 @@ from pathlib import Path
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QImage
 from PySide6.QtWidgets import (
-    QCheckBox,
     QFileDialog,
     QGroupBox,
     QHBoxLayout,
@@ -22,13 +21,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from croppy.config import save_encode_settings, save_parallel_enabled
 from croppy.ffmpeg.probe import VideoInfo
 from croppy.gui.canvas import VideoCanvas
+from croppy.gui.compression_panel import CompressionController, CompressionPanel
 from croppy.gui.crop_item import CropRectItem
 from croppy.gui.landing import file_dialog_filter
-from croppy.gui.settings_panel import CollapsibleSection, SettingsPanel
-from croppy.jobs.queue import suggested_worker_count
+from croppy.gui.output_picker import OutputFolderPicker
 from croppy.models import CropRegion, EncodeSettings
 
 
@@ -41,14 +39,13 @@ class EditorWidget(QWidget):
         self,
         info: VideoInfo,
         image: QImage,
-        encode_settings: EncodeSettings | None = None,
-        parallel_enabled: bool = False,
+        controller: CompressionController | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._info = info
-        self._encode_settings = encode_settings or EncodeSettings()
-        self._parallel_enabled = parallel_enabled
+        # A standalone controller is created when none is supplied (e.g. in tests).
+        self._controller = controller or CompressionController(self)
         self._syncing_selection = False
         self._build_ui()
         self.canvas.set_image(image)
@@ -75,18 +72,13 @@ class EditorWidget(QWidget):
         ]
 
     def encode_settings(self) -> EncodeSettings:
-        return self.settings_panel.settings()
-
-    def parallel_enabled(self) -> bool:
-        return self.parallel_check.isChecked()
+        return self._controller.settings()
 
     def output_dir(self) -> Path:
-        return Path(self.output_dir_edit.text())
+        return self.output_picker.output_dir()
 
     def set_output_dir(self, path: Path) -> None:
-        text = str(path)
-        self.output_dir_edit.setText(text)
-        self.output_dir_edit.setToolTip(text)
+        self.output_picker.set_output_dir(path)
 
     # --- UI -----------------------------------------------------------------
 
@@ -136,19 +128,8 @@ class EditorWidget(QWidget):
         ig.addWidget(self.browse_input_btn, 0)
         v.addWidget(input_group)
 
-        output_group = QGroupBox("Output folder")
-        og = QHBoxLayout(output_group)
-        og.setContentsMargins(8, 8, 8, 8)
-        og.setSpacing(6)
-        self.output_dir_edit = QLineEdit(str(self._info.path.parent))
-        self.output_dir_edit.setReadOnly(True)
-        self.output_dir_edit.setToolTip(str(self._info.path.parent))
-        self.output_dir_edit.setCursorPosition(0)
-        self.browse_output_btn = QPushButton("Browse…")
-        self.browse_output_btn.clicked.connect(self._browse_output_dir)
-        og.addWidget(self.output_dir_edit, 1)
-        og.addWidget(self.browse_output_btn, 0)
-        v.addWidget(output_group)
+        self.output_picker = OutputFolderPicker(initial_dir=self._info.path.parent)
+        v.addWidget(self.output_picker)
 
         frame_group = QGroupBox("Preview frame")
         fl = QHBoxLayout(frame_group)
@@ -173,27 +154,10 @@ class EditorWidget(QWidget):
         cl.addWidget(self.empty_label)
         v.addWidget(crops_group)
 
-        self.settings_section = CollapsibleSection("Encoding settings", expanded=False)
-        self.settings_panel = SettingsPanel(initial=self._encode_settings)
-        # Persist edits so encoding settings survive across sessions.
-        self.settings_panel.settings_changed.connect(save_encode_settings)
-        self.settings_section.add_widget(self.settings_panel)
-        v.addWidget(self.settings_section)
+        self.compression = CompressionPanel(self._controller)
+        v.addWidget(self.compression)
 
         v.addStretch(1)
-
-        workers = suggested_worker_count()
-        self.parallel_check = QCheckBox(f"Parallel processing (up to {workers} at once)")
-        self.parallel_check.setToolTip(
-            "Process multiple crops at the same time using available CPU cores.\n"
-            "ffmpeg is already multi-threaded, so the speed-up is modest and may\n"
-            "not help on machines with few cores."
-        )
-        self.parallel_check.setEnabled(workers > 1)
-        self.parallel_check.setChecked(self._parallel_enabled and workers > 1)
-        # Persist the toggle so it survives across sessions.
-        self.parallel_check.toggled.connect(save_parallel_enabled)
-        v.addWidget(self.parallel_check)
 
         self.process_btn = QPushButton("Process")
         self.process_btn.setEnabled(False)
@@ -259,12 +223,3 @@ class EditorWidget(QWidget):
         )
         if path_str:
             self.video_change_requested.emit(Path(path_str))
-
-    def _browse_output_dir(self) -> None:
-        chosen = QFileDialog.getExistingDirectory(
-            self,
-            "Choose output folder",
-            str(self.output_dir()),
-        )
-        if chosen:
-            self.set_output_dir(Path(chosen))
