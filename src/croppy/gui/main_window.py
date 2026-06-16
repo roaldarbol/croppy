@@ -61,6 +61,16 @@ class MainWindow(QMainWindow):
         self.tabs.setCurrentWidget(self.crop_tab)
         self.crop_tab.open_video(path)
 
+    def shutdown(self) -> None:
+        """Cancel running jobs before the app exits (window close / Ctrl+C)."""
+        self._queue.shutdown()
+
+    # --- Qt overrides --------------------------------------------------------
+
+    def closeEvent(self, event) -> None:
+        self.shutdown()
+        super().closeEvent(event)
+
     # --- internals ----------------------------------------------------------
 
     def _on_parallel_toggled(self, enabled: bool) -> None:

@@ -59,15 +59,28 @@ class Job(ABC):
         """Human-readable row text in the progress panel."""
         return self.output_path.name
 
+    @property
+    def partial_output(self) -> Path:
+        """Temp file ffmpeg writes to; renamed to ``output_path`` only on success.
+
+        This means an interrupted or crashed run never leaves a corrupt file at
+        the real output name — at most a clearly-marked ``.partial`` file.
+        """
+        return partial_path(self.output_path)
+
     @abstractmethod
     def build_command(self) -> list[str]:
-        """Return the ffmpeg argv for this job."""
+        """Return the ffmpeg argv for this job (writes to :attr:`partial_output`)."""
 
-    def on_success(self) -> None:  # noqa: B027 - optional hook, default no-op
-        """Hook run after ffmpeg exits 0, before ``finished`` is emitted."""
+    def on_success(self) -> None:
+        """Promote the finished ``.partial`` file to the real output name."""
+        partial = self.partial_output
+        if partial.exists():
+            partial.replace(self.output_path)
 
-    def on_cleanup(self) -> None:  # noqa: B027 - optional hook, default no-op
-        """Hook run after a failed or canceled run."""
+    def on_cleanup(self) -> None:
+        """Drop the incomplete ``.partial`` file after a failed/canceled run."""
+        self.partial_output.unlink(missing_ok=True)
 
     def fraction(self) -> float:
         """Progress in ``[0, 1]`` based on streamed ``out_time_us`` vs duration."""
@@ -84,7 +97,7 @@ class CropJob(Job):
     settings: EncodeSettings
 
     def build_command(self) -> list[str]:
-        return build_crop_command(self.input_path, self.output_path, self.region, self.settings)
+        return build_crop_command(self.input_path, self.partial_output, self.region, self.settings)
 
 
 @dataclass(kw_only=True)
@@ -94,7 +107,7 @@ class CompressJob(Job):
     settings: EncodeSettings
 
     def build_command(self) -> list[str]:
-        return build_compress_command(self.input_path, self.output_path, self.settings)
+        return build_compress_command(self.input_path, self.partial_output, self.settings)
 
 
 @dataclass(kw_only=True)
@@ -111,17 +124,15 @@ class CombineJob(Job):
     def build_command(self) -> list[str]:
         assert self.list_path is not None
         write_concat_list(self.inputs, self.list_path)
-        return build_combine_command(self.list_path, partial_path(self.output_path), self.settings)
+        return build_combine_command(self.list_path, self.partial_output, self.settings)
 
     def on_success(self) -> None:
-        # Rename the fragmented .partial.mp4 to the final name only on a clean
-        # finish, then drop the concat list. A failed run keeps the partial.
-        partial = partial_path(self.output_path)
-        if partial.exists():
-            partial.replace(self.output_path)
+        super().on_success()  # rename .partial.mp4 → final
         self._remove_list()
 
     def on_cleanup(self) -> None:
+        # Keep the fragmented .partial.mp4 (it's playable up to where it stopped);
+        # only drop the concat list.
         self._remove_list()
 
     def _remove_list(self) -> None:

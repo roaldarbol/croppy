@@ -172,6 +172,20 @@ def test_remove_drops_staged_job(qtbot, qapp, test_video: Path, tmp_path: Path) 
     assert queue.get(job.id) is None
 
 
+def test_shutdown_drains_pending_and_active(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
+    j1 = _make_job(test_video, tmp_path / "a.mp4")
+    j2 = _make_job(test_video, tmp_path / "b.mp4")
+    queue = JobQueue(max_workers=1)
+    queue.submit(j1)
+    queue.submit(j2)
+    queue.start_all()
+
+    queue.shutdown()
+    assert not queue._pending  # staged/pending jobs dropped
+    # The running job is cancelled; the queue drains without hanging.
+    qtbot.waitUntil(lambda: not queue._active, timeout=10000)
+
+
 def test_set_max_workers_rejects_zero() -> None:
     queue = JobQueue()
     with pytest.raises(ValueError):

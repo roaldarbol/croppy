@@ -112,6 +112,15 @@ class JobQueue(QObject):
         self._max_workers = n
         self._maybe_start_next()
 
+    def shutdown(self) -> None:
+        """Stop everything: drop pending jobs and cancel running ones.
+
+        Used on app exit so we don't leave orphaned ffmpeg processes behind.
+        """
+        self._pending.clear()
+        for worker in list(self._active.values()):
+            worker.cancel()
+
     def jobs(self) -> list[Job]:
         return list(self._jobs.values())
 
