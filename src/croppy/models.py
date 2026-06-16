@@ -66,8 +66,8 @@ class EncodeSettings:
     # NVENC (GPU) quality
     cq: int = 28
     nvenc_preset: str = "p7"
-    # CPU (libx264/libx265) quality
-    video_codec: str = "libx264"
+    # CPU (libx264/libx265) quality. When ``encoder`` resolves to a CPU codec,
+    # that codec name (``libx264``/``libx265``) is used directly.
     preset: str = "medium"
     crf: int = 18
     tune: str = ""  # empty = no -tune flag

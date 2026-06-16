@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
+    QCheckBox,
     QHBoxLayout,
     QLabel,
     QProgressBar,
@@ -13,18 +14,18 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from croppy.jobs.job import CropJob, JobState
-from croppy.jobs.queue import JobQueue
+from croppy.jobs.job import Job, JobState
+from croppy.jobs.queue import JobQueue, suggested_worker_count
 
 _FINISHED_STATES = frozenset({JobState.DONE, JobState.FAILED, JobState.CANCELED})
 
 
 class JobRow(QWidget):
-    """A single row in the progress panel for one :class:`CropJob`."""
+    """A single row in the progress panel for one :class:`Job`."""
 
     cancel_clicked = Signal(int)  # job_id
 
-    def __init__(self, job: CropJob, parent: QWidget | None = None) -> None:
+    def __init__(self, job: Job, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._job = job
 
@@ -32,7 +33,7 @@ class JobRow(QWidget):
         h.setContentsMargins(4, 2, 4, 2)
         h.setSpacing(8)
 
-        self.label = QLabel(job.output_path.name)
+        self.label = QLabel(job.label)
         self.label.setMinimumWidth(220)
         self.label.setToolTip(str(job.output_path))
         self.label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
@@ -55,7 +56,7 @@ class JobRow(QWidget):
         h.addWidget(self.status)
         h.addWidget(self.cancel_btn)
 
-    def job(self) -> CropJob:
+    def job(self) -> Job:
         return self._job
 
     def set_progress(self, fraction: float) -> None:
@@ -90,8 +91,14 @@ class ProgressPanel(QWidget):
     """Renders a stream of job rows bound to a :class:`JobQueue`'s signals."""
 
     cancel_requested = Signal(int)  # job_id
+    parallel_toggled = Signal(bool)  # parallel processing on/off
 
-    def __init__(self, queue: JobQueue, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        queue: JobQueue,
+        parallel_enabled: bool = False,
+        parent: QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
         self._queue = queue
         self._rows: dict[int, JobRow] = {}
@@ -104,11 +111,24 @@ class ProgressPanel(QWidget):
         header.setContentsMargins(0, 0, 0, 0)
         self._empty = QLabel("No jobs yet.")
         self._empty.setStyleSheet("color: #888;")
+
+        workers = suggested_worker_count()
+        self._parallel_check = QCheckBox(f"Parallel (up to {workers})")
+        self._parallel_check.setToolTip(
+            "Process multiple jobs at the same time using available CPU/GPU.\n"
+            "ffmpeg is already multi-threaded, so the CPU speed-up is modest; on\n"
+            "an NVENC GPU, running several encodes keeps all encode engines busy."
+        )
+        self._parallel_check.setEnabled(workers > 1)
+        self._parallel_check.setChecked(parallel_enabled and workers > 1)
+        self._parallel_check.toggled.connect(self.parallel_toggled)
+
         self._clear_btn = QPushButton("Clear finished")
         self._clear_btn.setEnabled(False)
         self._clear_btn.clicked.connect(self.clear_finished)
         header.addWidget(self._empty, 1)
         header.addStretch(0)
+        header.addWidget(self._parallel_check, 0)
         header.addWidget(self._clear_btn, 0)
         outer.addLayout(header)
 
@@ -132,7 +152,10 @@ class ProgressPanel(QWidget):
 
     # --- public API ---------------------------------------------------------
 
-    def add_job(self, job: CropJob) -> JobRow:
+    def parallel_enabled(self) -> bool:
+        return self._parallel_check.isChecked()
+
+    def add_job(self, job: Job) -> JobRow:
         """Add a 'queued' row for ``job``. Call BEFORE ``queue.submit(job)`` so
         the row exists by the time the queue immediately fires ``job_started``.
         """

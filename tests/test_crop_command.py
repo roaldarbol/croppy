@@ -13,7 +13,7 @@ def test_basic_command_shape(tmp_path: Path) -> None:
         input_path=tmp_path / "in.mp4",
         output_path=tmp_path / "out.mp4",
         region=CropRegion(10, 20, 100, 80),
-        settings=EncodeSettings(),
+        settings=EncodeSettings(encoder="libx264"),
     )
     # Critical args present in expected order/structure
     assert cmd[0].lower().endswith(("ffmpeg", "ffmpeg.exe"))
@@ -53,12 +53,12 @@ def test_audio_bitrate_honored(tmp_path: Path) -> None:
     assert cmd[cmd.index("-b:a") + 1] == "256k"
 
 
-def test_video_codec_honored(tmp_path: Path) -> None:
+def test_cpu_codec_honored(tmp_path: Path) -> None:
     cmd = build_crop_command(
         input_path=tmp_path / "in.mp4",
         output_path=tmp_path / "out.mp4",
         region=CropRegion(0, 0, 64, 64),
-        settings=EncodeSettings(video_codec="libx265"),
+        settings=EncodeSettings(encoder="libx265"),
     )
     assert cmd[cmd.index("-c:v") + 1] == "libx265"
 
@@ -68,7 +68,7 @@ def test_tune_added_when_set(tmp_path: Path) -> None:
         input_path=tmp_path / "in.mp4",
         output_path=tmp_path / "out.mp4",
         region=CropRegion(0, 0, 64, 64),
-        settings=EncodeSettings(tune=""),
+        settings=EncodeSettings(encoder="libx264", tune=""),
     )
     assert "-tune" not in no_tune
 
@@ -76,7 +76,7 @@ def test_tune_added_when_set(tmp_path: Path) -> None:
         input_path=tmp_path / "in.mp4",
         output_path=tmp_path / "out.mp4",
         region=CropRegion(0, 0, 64, 64),
-        settings=EncodeSettings(tune="film"),
+        settings=EncodeSettings(encoder="libx264", tune="film"),
     )
     assert "-tune" in with_tune
     assert with_tune[with_tune.index("-tune") + 1] == "film"
@@ -87,7 +87,7 @@ def test_pixel_format_honored(tmp_path: Path) -> None:
         input_path=tmp_path / "in.mp4",
         output_path=tmp_path / "out.mp4",
         region=CropRegion(0, 0, 64, 64),
-        settings=EncodeSettings(pixel_format="yuv422p"),
+        settings=EncodeSettings(encoder="libx264", pixel_format="yuv422p"),
     )
     assert cmd[cmd.index("-pix_fmt") + 1] == "yuv422p"
 

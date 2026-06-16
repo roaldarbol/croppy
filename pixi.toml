@@ -3,7 +3,7 @@ authors = ["Mikkel Roald-Arbøl <github.ggb9a@simplelogin.co>"]
 channels = ["conda-forge"]
 name = "croppy"
 platforms = ["osx-64", "osx-arm64", "linux-64", "win-64"]
-version = "0.2.0"
+version = "0.3.0"
 
 [tasks]
 croppy = "python -m croppy"

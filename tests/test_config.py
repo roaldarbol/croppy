@@ -18,7 +18,9 @@ def test_load_returns_defaults_when_empty() -> None:
 def test_encode_settings_roundtrip() -> None:
     custom = EncodeSettings(
         container="mkv",
-        video_codec="libx265",
+        encoder="nvenc_hevc",
+        cq=30,
+        nvenc_preset="p5",
         preset="slow",
         crf=23,
         tune="film",

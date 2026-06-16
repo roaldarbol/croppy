@@ -8,7 +8,7 @@ from collections import deque
 from loguru import logger
 from PySide6.QtCore import QObject, Signal
 
-from croppy.jobs.job import CropJob, JobState
+from croppy.jobs.job import Job, JobState
 from croppy.jobs.worker import Worker
 
 DEFAULT_MAX_WORKERS = 1
@@ -26,7 +26,7 @@ def suggested_worker_count() -> int:
 
 
 class JobQueue(QObject):
-    """Owns a FIFO queue of :class:`CropJob` and runs up to ``max_workers`` concurrently."""
+    """Owns a FIFO queue of :class:`Job` and runs up to ``max_workers`` concurrently."""
 
     job_started = Signal(int)
     job_progress = Signal(int, "qlonglong")  # job_id, microseconds since clip start
@@ -43,13 +43,13 @@ class JobQueue(QObject):
         if max_workers < 1:
             raise ValueError("max_workers must be >= 1")
         self._max_workers = max_workers
-        self._pending: deque[CropJob] = deque()
+        self._pending: deque[Job] = deque()
         self._active: dict[int, Worker] = {}
-        self._jobs: dict[int, CropJob] = {}
+        self._jobs: dict[int, Job] = {}
 
     # --- public API ---------------------------------------------------------
 
-    def submit(self, job: CropJob) -> int:
+    def submit(self, job: Job) -> int:
         if job.id in self._jobs:
             raise ValueError(f"Job {job.id} is already enqueued")
         self._jobs[job.id] = job
@@ -79,7 +79,7 @@ class JobQueue(QObject):
         self._max_workers = n
         self._maybe_start_next()
 
-    def jobs(self) -> list[CropJob]:
+    def jobs(self) -> list[Job]:
         return list(self._jobs.values())
 
     def is_idle(self) -> bool:
