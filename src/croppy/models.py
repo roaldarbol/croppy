@@ -49,9 +49,24 @@ class CropRegion:
 class EncodeSettings:
     """Encoding parameters for ffmpeg output. Defaults aim for a good
     quality/size compromise; everything is overridable from the settings panel.
+
+    ``encoder`` chooses the video pipeline:
+
+    * ``"auto"``       — NVENC HEVC when ``hevc_nvenc`` is available, else libx265.
+    * ``"nvenc_hevc"`` — force GPU HEVC (``-cq`` / ``-preset p1..p7``).
+    * ``"libx265"`` / ``"libx264"`` — force CPU x265/x264 (``-crf`` / x264-style preset).
+
+    ``cq``/``nvenc_preset`` apply to the NVENC path; ``crf``/``preset``/``tune``
+    apply to the CPU path. ``pixel_format`` and the audio/container fields apply
+    to both.
     """
 
     container: str = "mp4"
+    encoder: str = "auto"
+    # NVENC (GPU) quality
+    cq: int = 28
+    nvenc_preset: str = "p7"
+    # CPU (libx264/libx265) quality
     video_codec: str = "libx264"
     preset: str = "medium"
     crf: int = 18

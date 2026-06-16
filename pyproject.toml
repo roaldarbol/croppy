@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "croppy"
-version = "0.2.0"
-description = "Visual GUI for drawing crop boxes on a video and producing cropped output files via ffmpeg."
+version = "0.3.0"
+description = "Visual GUI for cropping, combining, and compressing videos via ffmpeg."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { file = "LICENSE" }
