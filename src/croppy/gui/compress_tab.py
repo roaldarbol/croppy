@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from loguru import logger
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -19,7 +19,6 @@ from croppy.ffmpeg.compress import default_compress_output_path
 from croppy.ffmpeg.probe import ProbeError, probe
 from croppy.gui.compression_panel import CompressionController, CompressionPanel
 from croppy.gui.output_picker import OutputFolderPicker
-from croppy.gui.progress_panel import ProgressPanel
 from croppy.gui.video_list import VideoList
 from croppy.jobs.job import CompressJob
 from croppy.jobs.queue import JobQueue
@@ -36,18 +35,14 @@ def _duration(path: Path) -> float:
 class CompressTab(QWidget):
     """Compress N videos with the shared compression settings."""
 
-    jobs_submitted = Signal()
-
     def __init__(
         self,
         controller: CompressionController,
         queue: JobQueue,
-        progress_panel: ProgressPanel,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._queue = queue
-        self._progress = progress_panel
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -79,7 +74,7 @@ class CompressTab(QWidget):
 
         v.addStretch(1)
 
-        self.queue_btn = QPushButton("Queue compress jobs")
+        self.queue_btn = QPushButton("Add compress jobs to queue")
         self.queue_btn.setEnabled(False)
         self.queue_btn.clicked.connect(self._queue_jobs)
         v.addWidget(self.queue_btn)
@@ -113,10 +108,8 @@ class CompressTab(QWidget):
                 input_path=path,
                 settings=settings,
             )
-            self._progress.add_job(job)
             self._queue.submit(job)
             submitted = True
 
         if submitted:
-            self.jobs_submitted.emit()
             self.video_list.clear()

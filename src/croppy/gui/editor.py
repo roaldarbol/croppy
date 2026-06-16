@@ -159,7 +159,7 @@ class EditorWidget(QWidget):
 
         v.addStretch(1)
 
-        self.process_btn = QPushButton("Process")
+        self.process_btn = QPushButton("Add to queue")
         self.process_btn.setEnabled(False)
         self.process_btn.clicked.connect(self.process_requested)
         v.addWidget(self.process_btn)

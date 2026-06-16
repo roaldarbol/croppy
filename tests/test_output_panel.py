@@ -92,8 +92,10 @@ def test_main_window_writes_to_chosen_output_dir(
     editor.set_output_dir(out_dir)
     editor.canvas.add_crop(QRectF(0, 0, 100, 100))
 
+    # "Add to queue" stages the job; the Jobs tab / queue starts it.
+    editor.process_btn.click()
     with qtbot.waitSignal(window._queue.job_finished, timeout=30000):
-        editor.process_btn.click()
+        window._queue.start_all()
 
     assert (out_dir / "clip_crop1.mp4").is_file()
     # And it should NOT have landed next to the source

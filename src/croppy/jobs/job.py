@@ -12,6 +12,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
+from typing import ClassVar
 
 from croppy.ffmpeg.combine import (
     build_combine_command,
@@ -50,6 +51,9 @@ class Job(ABC):
     progress_us: int = 0
     error: str = ""
 
+    #: Short operation tag shown in the Jobs list (overridden per subclass).
+    kind: ClassVar[str] = "job"
+
     @property
     def label(self) -> str:
         """Human-readable row text in the progress panel."""
@@ -74,6 +78,7 @@ class Job(ABC):
 
 @dataclass(kw_only=True)
 class CropJob(Job):
+    kind: ClassVar[str] = "crop"
     input_path: Path
     region: CropRegion
     settings: EncodeSettings
@@ -84,6 +89,7 @@ class CropJob(Job):
 
 @dataclass(kw_only=True)
 class CompressJob(Job):
+    kind: ClassVar[str] = "compress"
     input_path: Path
     settings: EncodeSettings
 
@@ -93,6 +99,7 @@ class CompressJob(Job):
 
 @dataclass(kw_only=True)
 class CombineJob(Job):
+    kind: ClassVar[str] = "combine"
     inputs: list[Path]
     settings: EncodeSettings
     list_path: Path | None = None

@@ -14,7 +14,6 @@ from croppy.ffmpeg.probe import ProbeError, probe
 from croppy.gui.compression_panel import CompressionController
 from croppy.gui.editor import EditorWidget
 from croppy.gui.landing import LandingWidget
-from croppy.gui.progress_panel import ProgressPanel
 from croppy.jobs.job import CropJob
 from croppy.jobs.queue import JobQueue
 
@@ -22,20 +21,17 @@ from croppy.jobs.queue import JobQueue
 class CropTab(QWidget):
     """Draw crop ROIs on a video and queue one crop job per region."""
 
-    jobs_submitted = Signal()
     title_changed = Signal(str)  # window-title hint (e.g. the open file name)
 
     def __init__(
         self,
         controller: CompressionController,
         queue: JobQueue,
-        progress_panel: ProgressPanel,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._controller = controller
         self._queue = queue
-        self._progress = progress_panel
         self._video_path: Path | None = None
         self._editor: EditorWidget | None = None
 
@@ -97,7 +93,6 @@ class CropTab(QWidget):
         settings = self._editor.encode_settings()
         info = self._editor.info()
         output_dir = self._editor.output_dir()
-        submitted = False
         for index, region in enumerate(regions):
             output_path = default_output_path(
                 self._video_path,
@@ -112,10 +107,4 @@ class CropTab(QWidget):
                 region=region,
                 settings=settings,
             )
-            # Row must exist before submit(): submit() can fire job_started
-            # synchronously.
-            self._progress.add_job(job)
             self._queue.submit(job)
-            submitted = True
-        if submitted:
-            self.jobs_submitted.emit()

@@ -27,8 +27,7 @@ def _copies(test_video: Path, tmp_path: Path, n: int) -> list[Path]:
 
 def test_combine_tab_queues_single_job(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
     queue = MagicMock()
-    progress = MagicMock()
-    tab = CombineTab(CompressionController(), queue, progress)
+    tab = CombineTab(CompressionController(), queue)
     qtbot.addWidget(tab)
 
     paths = _copies(test_video, tmp_path, 3)
@@ -52,7 +51,7 @@ def test_combine_tab_queues_single_job(qtbot, qapp, test_video: Path, tmp_path: 
 
 def test_combine_tab_forces_mp4_extension(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
     queue = MagicMock()
-    tab = CombineTab(CompressionController(), queue, MagicMock())
+    tab = CombineTab(CompressionController(), queue)
     qtbot.addWidget(tab)
     tab.video_list.add_paths(_copies(test_video, tmp_path, 2))
     tab.output_picker.set_output_dir(tmp_path)
@@ -64,7 +63,7 @@ def test_combine_tab_forces_mp4_extension(qtbot, qapp, test_video: Path, tmp_pat
 
 def test_combine_tab_needs_two_videos(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
     queue = MagicMock()
-    tab = CombineTab(CompressionController(), queue, MagicMock())
+    tab = CombineTab(CompressionController(), queue)
     qtbot.addWidget(tab)
     tab.video_list.add_paths(_copies(test_video, tmp_path, 1))
     assert not tab.queue_btn.isEnabled()
@@ -74,8 +73,7 @@ def test_compress_tab_queues_one_job_per_video(
     qtbot, qapp, test_video: Path, tmp_path: Path
 ) -> None:
     queue = MagicMock()
-    progress = MagicMock()
-    tab = CompressTab(CompressionController(), queue, progress)
+    tab = CompressTab(CompressionController(), queue)
     qtbot.addWidget(tab)
 
     paths = _copies(test_video, tmp_path, 3)
@@ -98,7 +96,7 @@ def test_compress_tab_defaults_output_next_to_input(
     qtbot, qapp, test_video: Path, tmp_path: Path
 ) -> None:
     queue = MagicMock()
-    tab = CompressTab(CompressionController(), queue, MagicMock())
+    tab = CompressTab(CompressionController(), queue)
     qtbot.addWidget(tab)
     paths = _copies(test_video, tmp_path, 1)
     tab.video_list.add_paths(paths)
