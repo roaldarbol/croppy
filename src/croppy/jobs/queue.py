@@ -26,13 +26,19 @@ def suggested_worker_count() -> int:
 
 
 class JobQueue(QObject):
-    """Owns a FIFO queue of :class:`Job` and runs up to ``max_workers`` concurrently."""
+    """Owns a set of :class:`Job` and runs up to ``max_workers`` concurrently.
 
+    Submitting a job *stages* it (state ``QUEUED``) without starting it; jobs
+    only run once explicitly released with :meth:`start` / :meth:`start_all`.
+    """
+
+    job_added = Signal(int)  # a job was staged
     job_started = Signal(int)
     job_progress = Signal(int, "qlonglong")  # job_id, microseconds since clip start
     job_finished = Signal(int)
     job_failed = Signal(int, str)
     job_canceled = Signal(int)
+    job_removed = Signal(int)
 
     def __init__(
         self,
@@ -50,26 +56,53 @@ class JobQueue(QObject):
     # --- public API ---------------------------------------------------------
 
     def submit(self, job: Job) -> int:
+        """Stage ``job`` (QUEUED). It does not run until :meth:`start`."""
         if job.id in self._jobs:
             raise ValueError(f"Job {job.id} is already enqueued")
+        job.state = JobState.QUEUED
         self._jobs[job.id] = job
-        self._pending.append(job)
-        logger.info("Queued job {}: {} → {}", job.id, job.input_path.name, job.output_path.name)
-        self._maybe_start_next()
+        logger.info("Staged job {}: {}", job.id, job.output_path.name)
+        self.job_added.emit(job.id)
         return job.id
+
+    def start(self, job_ids: list[int]) -> None:
+        """Release the given staged jobs to run (respecting ``max_workers``)."""
+        for job_id in job_ids:
+            job = self._jobs.get(job_id)
+            if job is not None and job.state == JobState.QUEUED:
+                job.state = JobState.PENDING
+                self._pending.append(job)
+        self._maybe_start_next()
+
+    def start_all(self) -> None:
+        """Release every staged (QUEUED) job to run."""
+        self.start([job.id for job in self._jobs.values() if job.state == JobState.QUEUED])
+
+    def remove(self, job_id: int) -> bool:
+        """Drop a job that is not running. Returns ``True`` if removed."""
+        job = self._jobs.get(job_id)
+        if job is None or job.id in self._active:
+            return False
+        if job in self._pending:
+            self._pending.remove(job)
+        del self._jobs[job_id]
+        self.job_removed.emit(job_id)
+        return True
 
     def cancel(self, job_id: int) -> None:
         worker = self._active.get(job_id)
         if worker is not None:
             worker.cancel()
             return
-        for pending in list(self._pending):
-            if pending.id == job_id:
-                self._pending.remove(pending)
-                pending.state = JobState.CANCELED
-                logger.info("Canceled pending job {}", job_id)
-                self.job_canceled.emit(job_id)
-                return
+        job = self._jobs.get(job_id)
+        if job is None:
+            return
+        if job in self._pending:
+            self._pending.remove(job)
+        if job.state in (JobState.QUEUED, JobState.PENDING):
+            job.state = JobState.CANCELED
+            logger.info("Canceled job {}", job_id)
+            self.job_canceled.emit(job_id)
 
     def set_max_workers(self, n: int) -> None:
         """Change how many jobs may run at once. Raising it can immediately
@@ -81,6 +114,12 @@ class JobQueue(QObject):
 
     def jobs(self) -> list[Job]:
         return list(self._jobs.values())
+
+    def get(self, job_id: int) -> Job | None:
+        return self._jobs.get(job_id)
+
+    def has_staged(self) -> bool:
+        return any(j.state == JobState.QUEUED for j in self._jobs.values())
 
     def is_idle(self) -> bool:
         return not self._active and not self._pending

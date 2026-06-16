@@ -24,7 +24,8 @@ from croppy.models import CropRegion, EncodeSettings
 
 
 class JobState(StrEnum):
-    PENDING = "pending"
+    QUEUED = "queued"  # staged in the queue, not yet released to run
+    PENDING = "pending"  # released to run, waiting for a free worker slot
     RUNNING = "running"
     DONE = "done"
     FAILED = "failed"
@@ -45,7 +46,7 @@ class Job(ABC):
     output_path: Path
     duration_seconds: float
     id: int = field(default_factory=_next_job_id)
-    state: JobState = JobState.PENDING
+    state: JobState = JobState.QUEUED
     progress_us: int = 0
     error: str = ""
 

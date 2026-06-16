@@ -29,6 +29,7 @@ def test_queue_submits_and_runs_one_job(qtbot, qapp, test_video: Path, tmp_path:
     queue = JobQueue()
     with qtbot.waitSignal(queue.job_started, timeout=2000):
         queue.submit(job)
+        queue.start_all()
     with qtbot.waitSignal(queue.job_finished, timeout=30000) as blocker:
         pass  # we waited above; now wait for finished
     assert blocker.args == [job.id]
@@ -47,6 +48,7 @@ def test_queue_emits_progress(qtbot, qapp, test_video: Path, tmp_path: Path) -> 
     queue.job_progress.connect(lambda _id, us: progresses.append(us))
     with qtbot.waitSignal(queue.job_finished, timeout=30000):
         queue.submit(job)
+        queue.start_all()
     assert progresses, "expected at least one progress update"
     assert max(progresses) > 0
 
@@ -61,6 +63,7 @@ def test_queue_serializes_two_jobs(qtbot, qapp, test_video: Path, tmp_path: Path
     with qtbot.waitSignal(queue.job_finished, timeout=30000) as first:
         queue.submit(j1)
         queue.submit(j2)
+        queue.start_all()
     # First completion should be j1
     assert first.args == [j1.id]
 
@@ -78,6 +81,7 @@ def test_queue_cancel_pending_emits_canceled(qtbot, qapp, test_video: Path, tmp_
     queue = JobQueue(max_workers=1)
     queue.submit(j1)
     queue.submit(j2)
+    queue.start_all()
     with qtbot.waitSignal(queue.job_canceled, timeout=2000) as blocker:
         queue.cancel(j2.id)
     assert blocker.args == [j2.id]
@@ -99,6 +103,7 @@ def test_queue_runs_two_jobs_in_parallel(qtbot, qapp, test_video: Path, tmp_path
 
     queue.submit(j1)
     queue.submit(j2)
+    queue.start_all()
     # With two workers, both jobs start immediately — neither waits for the other.
     assert started == [j1.id, j2.id]
     assert len(queue._active) == 2
@@ -120,6 +125,7 @@ def test_set_max_workers_starts_pending_job(qtbot, qapp, test_video: Path, tmp_p
 
     queue.submit(j1)
     queue.submit(j2)
+    queue.start_all()
     assert started == [j1.id]  # j2 held back at max_workers=1
 
     # Raising the cap should release the pending job without waiting.
@@ -127,6 +133,41 @@ def test_set_max_workers_starts_pending_job(qtbot, qapp, test_video: Path, tmp_p
     assert started == [j1.id, j2.id]
 
     qtbot.waitUntil(lambda: len(finished) == 2, timeout=30000)
+
+
+def test_submit_stages_without_starting(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
+    job = _make_job(test_video, tmp_path / "out.mp4")
+    queue = JobQueue()
+    with qtbot.waitSignal(queue.job_added, timeout=500) as blocker:
+        queue.submit(job)
+    assert blocker.args == [job.id]
+    assert job.state == JobState.QUEUED
+    assert not queue._active  # nothing running until start()
+
+
+def test_start_selected_releases_only_chosen(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
+    j1 = _make_job(test_video, tmp_path / "a.mp4")
+    j2 = _make_job(test_video, tmp_path / "b.mp4")
+    queue = JobQueue(max_workers=2)
+    started: list[int] = []
+    queue.job_started.connect(lambda jid: started.append(jid))
+    queue.submit(j1)
+    queue.submit(j2)
+    queue.start([j2.id])
+    assert started == [j2.id]
+    assert j1.state == JobState.QUEUED  # still staged
+    with qtbot.waitSignal(queue.job_finished, timeout=30000):
+        pass
+
+
+def test_remove_drops_staged_job(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
+    job = _make_job(test_video, tmp_path / "out.mp4")
+    queue = JobQueue()
+    queue.submit(job)
+    with qtbot.waitSignal(queue.job_removed, timeout=500) as blocker:
+        assert queue.remove(job.id) is True
+    assert blocker.args == [job.id]
+    assert queue.get(job.id) is None
 
 
 def test_set_max_workers_rejects_zero() -> None:
