@@ -90,6 +90,11 @@ class CompressionPanel(QWidget):
         self.settings_panel.set_settings(settings)
         self._pristine = True
 
+    def adopt(self, settings: EncodeSettings) -> None:
+        """Set ``settings`` and detach from the default (keeps them as a custom value)."""
+        self.settings_panel.set_settings(settings)
+        self._pristine = False
+
     def _on_user_edit(self, settings: EncodeSettings) -> None:
         self._pristine = False
         self.settings_changed.emit(settings)

@@ -89,8 +89,9 @@ class _VideoItemDelegate(QStyledItemDelegate):
             name_color = option.palette.highlightedText().color()
             muted = name_color
         else:
-            name_color = option.palette.text().color()
-            muted = QColor("#888")
+            # Light text for the forced-dark list background.
+            name_color = QColor("#dddddd")
+            muted = QColor("#888888")
 
         font = painter.font()
         font.setBold(True)
@@ -139,6 +140,8 @@ class _DropListWidget(QListWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setAcceptDrops(True)
+        # Dark middle field to match the Crop tab canvas.
+        self.setStyleSheet("QListWidget { background-color: #1e1e1e; border: none; }")
         self.center_widget: QWidget | None = None
         self.bottom_widget: QWidget | None = None
 

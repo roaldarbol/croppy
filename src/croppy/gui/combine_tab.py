@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from croppy.ffmpeg.crop import unique_output_path
 from croppy.ffmpeg.probe import ProbeError, probe
 from croppy.gui.compression_panel import CompressionController, CompressionPanel
 from croppy.gui.output_picker import OutputFolderPicker
@@ -44,15 +45,6 @@ def _total_duration(paths: list[Path]) -> float:
         except ProbeError as exc:
             logger.warning("Could not probe {} for duration: {}", path, exc)
     return total
-
-
-def _unique_path(base: Path, taken: set[Path]) -> Path:
-    candidate = base
-    i = 2
-    while candidate in taken or candidate.exists():
-        candidate = base.with_name(f"{base.stem}-{i}{base.suffix}")
-        i += 1
-    return candidate
 
 
 @dataclass
@@ -136,7 +128,7 @@ class CombineTab(QWidget):
         v.addStretch(1)
         self.queue_btn = QPushButton("Add Job to Queue")
         self.queue_btn.setEnabled(False)
-        self.queue_btn.clicked.connect(self._queue_all)
+        self.queue_btn.clicked.connect(self._queue_current)
         v.addWidget(self.queue_btn)
 
         splitter.addWidget(groups_panel)
@@ -202,6 +194,7 @@ class CombineTab(QWidget):
             self.compression.set_settings(group.settings)
         finally:
             self._loading = False
+        self._update_queue_enabled()
 
     def _on_group_renamed(self, item: QListWidgetItem) -> None:
         row = self.groups_list.row(item)
@@ -244,34 +237,30 @@ class CombineTab(QWidget):
         self._update_queue_enabled()
 
     def _update_queue_enabled(self) -> None:
-        ready = any(g.video_list.count() >= 2 for g in self._groups)
-        self.queue_btn.setEnabled(ready)
+        self.queue_btn.setEnabled(self.current_group().video_list.count() >= 2)
 
     # --- queueing -----------------------------------------------------------
 
-    def _queue_all(self) -> None:
-        ready = [g for g in self._groups if g.video_list.count() >= 2]
-        if not ready:
+    def _queue_current(self) -> None:
+        """Queue only the selected group as one combine job."""
+        group = self.current_group()
+        paths = group.video_list.paths()
+        if len(paths) < 2:
             return
-        if any(g.output_dir is None for g in ready):
-            QMessageBox.warning(
-                self, "croppy", "Every group needs an output folder before queueing."
-            )
+        if group.output_dir is None:
+            QMessageBox.warning(self, "croppy", "Choose an output folder for this group first.")
             return
 
         taken = {job.output_path for job in self._queue.jobs()}
-        for group in ready:
-            stem = group.name.strip() or "combined"
-            if stem.lower().endswith(".mp4"):
-                stem = stem[:-4]
-            output_path = _unique_path(group.output_dir / f"{stem}.mp4", taken)
-            taken.add(output_path)
-            paths = group.video_list.paths()
-            job = CombineJob(
-                output_path=output_path,
-                duration_seconds=_total_duration(paths),
-                inputs=paths,
-                settings=group.settings,
-            )
-            self._queue.submit(job)
-        # Groups are kept so they can be tweaked and re-queued.
+        stem = group.name.strip() or "combined"
+        if stem.lower().endswith(".mp4"):
+            stem = stem[:-4]
+        output_path = unique_output_path(group.output_dir / f"{stem}.mp4", taken)
+        job = CombineJob(
+            output_path=output_path,
+            duration_seconds=_total_duration(paths),
+            inputs=paths,
+            settings=group.settings,
+        )
+        self._queue.submit(job)
+        # The group is kept so it can be tweaked and re-queued.

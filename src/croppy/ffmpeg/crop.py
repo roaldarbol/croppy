@@ -58,3 +58,17 @@ def default_output_path(
     """
     parent = output_dir if output_dir is not None else input_path.parent
     return parent / f"{input_path.stem}_crop{index + 1}.{container}"
+
+
+def unique_output_path(base: Path, taken: set[Path]) -> Path:
+    """Return ``base`` or ``base-2``, ``base-3``, … avoiding ``taken`` and disk.
+
+    Lets the same source be queued more than once (e.g. with different settings)
+    without clobbering an earlier output.
+    """
+    candidate = base
+    i = 2
+    while candidate in taken or candidate.exists():
+        candidate = base.with_name(f"{base.stem}-{i}{base.suffix}")
+        i += 1
+    return candidate

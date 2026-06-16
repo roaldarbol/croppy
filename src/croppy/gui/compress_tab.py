@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from croppy.ffmpeg.compress import default_compress_output_path
+from croppy.ffmpeg.crop import unique_output_path
 from croppy.ffmpeg.probe import ProbeError, probe
 from croppy.gui.compression_panel import (
     CompressionController,
@@ -40,16 +41,6 @@ def _duration(path: Path) -> float:
     except ProbeError as exc:
         logger.warning("Could not probe {} for duration: {}", path, exc)
         return 0.0
-
-
-def _unique_path(base: Path, taken: set[Path]) -> Path:
-    """Return ``base`` or ``base-2``, ``base-3``, … avoiding ``taken`` and disk."""
-    candidate = base
-    i = 2
-    while candidate in taken or candidate.exists():
-        candidate = base.with_name(f"{base.stem}-{i}{base.suffix}")
-        i += 1
-    return candidate
 
 
 class CompressTab(QWidget):
@@ -84,8 +75,9 @@ class CompressTab(QWidget):
 
         hint = QLabel(
             "Add videos to compress. Each becomes <name>_compressed in the output "
-            "folder (or next to the original). Compression below applies to the "
-            "selected video(s) only; new videos start from the default."
+            "folder (or next to the original). Select videos to queue just those "
+            "(or none to queue all); compression below applies to the selected "
+            "video(s) only and new videos start from the default."
         )
         hint.setWordWrap(True)
         hint.setStyleSheet("color: #888;")
@@ -151,19 +143,22 @@ class CompressTab(QWidget):
         paths = self.video_list.paths()
         if not paths:
             return
+        # Queue the selected rows; with nothing selected, queue all of them.
+        rows = self.video_list.selected_rows() or list(range(len(paths)))
         output_dir = self.output_picker.output_dir() if self.output_picker.has_dir() else None
 
         # Avoid clobbering outputs already queued or on disk, so the same source
         # can be queued again with different settings to compare the results.
         taken = {job.output_path for job in self._queue.jobs()}
-        for row, path in enumerate(paths):
+        for row in rows:
+            path = paths[row]
             settings = self.video_list.item_data(row)
             if not isinstance(settings, EncodeSettings):
                 settings = self._controller.default()
             base = default_compress_output_path(
                 path, container=settings.container, output_dir=output_dir
             )
-            output_path = _unique_path(base, taken)
+            output_path = unique_output_path(base, taken)
             taken.add(output_path)
             job = CompressJob(
                 output_path=output_path,

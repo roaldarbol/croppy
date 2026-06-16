@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from loguru import logger
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QRectF, Qt, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from croppy.ffmpeg.crop import default_output_path
+from croppy.ffmpeg.crop import default_output_path, unique_output_path
 from croppy.ffmpeg.frame import FrameExtractError, extract_frame
 from croppy.ffmpeg.probe import ProbeError, probe
 from croppy.gui.compression_panel import CompressionController
@@ -64,17 +64,21 @@ class CropTab(QWidget):
         left = QWidget(splitter)
         lv = QVBoxLayout(left)
         lv.setContentsMargins(8, 8, 8, 8)
-        lv.addWidget(QLabel("<b>Open videos</b>"))
+        lv.addWidget(QLabel("<b>Videos</b>"))
         self.videos_list = QListWidget()
         self.videos_list.currentRowChanged.connect(self._on_selected)
         lv.addWidget(self.videos_list, 1)
         lb = QHBoxLayout()
         self.add_btn = QPushButton("Add video…")
         self.add_btn.clicked.connect(self._browse_video)
+        self.duplicate_btn = QPushButton("Duplicate")
+        self.duplicate_btn.clicked.connect(self._duplicate_current)
+        self.duplicate_btn.setEnabled(False)
         self.remove_btn = QPushButton("Remove")
         self.remove_btn.clicked.connect(self._remove_current)
         self.remove_btn.setEnabled(False)
         lb.addWidget(self.add_btn)
+        lb.addWidget(self.duplicate_btn)
         lb.addWidget(self.remove_btn)
         lv.addLayout(lb)
 
@@ -105,14 +109,7 @@ class CropTab(QWidget):
 
         editor = EditorWidget(controller=self._controller)
         editor.load(info, image)
-        editor.process_requested.connect(lambda e=editor: self._queue_editor(e))
-        editor.frame_change_requested.connect(lambda n, e=editor: self._reload(e, n))
-        editor.video_change_requested.connect(self.open_video)  # drop another → open it
-
-        self._videos.append(_OpenVideo(path, editor))
-        self.stack.addWidget(editor)
-        self.videos_list.addItem(path.name)
-        self.videos_list.setCurrentRow(len(self._videos) - 1)
+        self._register_editor(path, editor)
 
     def current_editor(self) -> EditorWidget | None:
         row = self.videos_list.currentRow()
@@ -120,19 +117,55 @@ class CropTab(QWidget):
 
     # --- internals ----------------------------------------------------------
 
+    def _register_editor(self, path: Path, editor: EditorWidget, at: int | None = None) -> None:
+        editor.process_requested.connect(lambda e=editor: self._queue_editor(e))
+        editor.frame_change_requested.connect(lambda n, e=editor: self._reload(e, n))
+        editor.video_change_requested.connect(self.open_video)  # drop another → open it
+        self.stack.addWidget(editor)
+        if at is None:
+            at = len(self._videos)
+        self._videos.insert(at, _OpenVideo(path, editor))
+        self.videos_list.insertItem(at, path.name)
+        self.videos_list.setCurrentRow(at)
+
     def _browse_video(self) -> None:
         # Reuse the placeholder editor's file dialog (covers the empty state too).
         self._placeholder._browse_input_video()
+
+    def _duplicate_current(self) -> None:
+        row = self.videos_list.currentRow()
+        if not (0 <= row < len(self._videos)):
+            return
+        src = self._videos[row]
+        frame = src.editor.frame_spin.value()
+        try:
+            info = probe(src.path)
+            image = extract_frame(src.path, frame_number=frame)
+        except (ProbeError, FrameExtractError) as exc:
+            logger.warning("Could not duplicate {}: {}", src.path, exc)
+            return
+
+        editor = EditorWidget(controller=self._controller)
+        editor.load(info, image)
+        editor.frame_spin.setValue(frame)
+        for crop in src.editor.canvas.crops():
+            r = crop.crop_region()
+            editor.canvas.add_crop(QRectF(r.x, r.y, r.w, r.h))
+        editor.compression.adopt(src.editor.encode_settings())
+        editor.set_output_dir(src.editor.output_dir())
+        self._register_editor(src.path, editor, at=row + 1)
 
     def _on_selected(self, row: int) -> None:
         if 0 <= row < len(self._videos):
             video = self._videos[row]
             self.stack.setCurrentWidget(video.editor)
             self.remove_btn.setEnabled(True)
+            self.duplicate_btn.setEnabled(True)
             self.title_changed.emit(video.path.name)
         else:
             self.stack.setCurrentWidget(self._placeholder)
             self.remove_btn.setEnabled(False)
+            self.duplicate_btn.setEnabled(False)
 
     def _remove_current(self) -> None:
         row = self.videos_list.currentRow()
@@ -173,13 +206,18 @@ class CropTab(QWidget):
         settings = editor.encode_settings()
         info = editor.info()
         output_dir = editor.output_dir()
+        taken = {job.output_path for job in self._queue.jobs()}
         for index, region in enumerate(regions):
-            output_path = default_output_path(
-                video.path,
-                index,
-                container=settings.container,
-                output_dir=output_dir,
+            output_path = unique_output_path(
+                default_output_path(
+                    video.path,
+                    index,
+                    container=settings.container,
+                    output_dir=output_dir,
+                ),
+                taken,
             )
+            taken.add(output_path)
             job = CropJob(
                 output_path=output_path,
                 duration_seconds=info.duration_seconds,

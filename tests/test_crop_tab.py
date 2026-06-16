@@ -62,6 +62,43 @@ def test_queue_editor_submits_one_job_per_crop(
     assert job.input_path == a
 
 
+def test_duplicate_copies_crops_and_settings(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
+    tab = CropTab(CompressionController(), MagicMock())
+    qtbot.addWidget(tab)
+    a = _copy(test_video, tmp_path / "a.mp4")
+    tab.open_video(a)
+    src = tab.current_editor()
+    src.canvas.add_crop(QRectF(0, 0, 100, 100))
+    src.canvas.add_crop(QRectF(20, 20, 60, 60))
+    base_cq = src.encode_settings().cq
+    src.compression.settings_panel.cq_spin.setValue(base_cq + 4)
+
+    tab.duplicate_btn.click()
+
+    assert tab.videos_list.count() == 2
+    dup = tab.current_editor()
+    assert dup is not src
+    assert len(dup.canvas.crops()) == 2  # crops copied
+    assert dup.encode_settings().cq == base_cq + 4  # compression copied
+    assert tab._videos[1].path == a  # same source, inserted after the original
+
+
+def test_queue_uniquifies_repeat_outputs(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
+    submitted: list = []
+    queue = MagicMock()
+    queue.jobs.side_effect = lambda: list(submitted)
+    queue.submit.side_effect = lambda job: submitted.append(job)
+    tab = CropTab(CompressionController(), queue)
+    qtbot.addWidget(tab)
+    tab.open_video(_copy(test_video, tmp_path / "a.mp4"))
+    tab.current_editor().canvas.add_crop(QRectF(0, 0, 100, 100))
+
+    tab.current_editor().process_btn.click()  # a_crop1.mp4
+    tab.current_editor().process_btn.click()  # a_crop1-2.mp4
+    names = [j.output_path.name for j in submitted]
+    assert names == ["a_crop1.mp4", "a_crop1-2.mp4"]
+
+
 def test_remove_video(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
     tab = CropTab(CompressionController(), MagicMock())
     qtbot.addWidget(tab)
