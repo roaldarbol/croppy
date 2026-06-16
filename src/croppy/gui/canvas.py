@@ -18,7 +18,6 @@ from PySide6.QtWidgets import (
     QGraphicsScene,
     QGraphicsView,
     QLabel,
-    QPushButton,
     QWidget,
 )
 
@@ -59,12 +58,6 @@ class VideoCanvas(QGraphicsView):
         self._placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._placeholder.setStyleSheet("color: #888; font-size: 16px;")
         self._placeholder.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-
-        # Floating "change video" button shown once a video is loaded.
-        self._change_btn = QPushButton("Change video…", self.viewport())
-        self._change_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._change_btn.clicked.connect(self.browse_requested)
-        self._change_btn.hide()
         self._position_overlays()
 
         self._scene.selectionChanged.connect(self._emit_selection)
@@ -83,7 +76,6 @@ class VideoCanvas(QGraphicsView):
             self._pixmap_item.setPixmap(pixmap)
         self._scene.setSceneRect(QRectF(0, 0, image.width(), image.height()))
         self._placeholder.hide()
-        self._change_btn.show()
         self._position_overlays()
         self._fit()
 
@@ -225,14 +217,7 @@ class VideoCanvas(QGraphicsView):
         self.fitInView(self._pixmap_item, Qt.AspectRatioMode.KeepAspectRatio)
 
     def _position_overlays(self) -> None:
-        rect = self.viewport().rect()
-        self._placeholder.setGeometry(rect)
-        self._change_btn.adjustSize()
-        margin = 10
-        self._change_btn.move(
-            rect.right() - self._change_btn.width() - margin,
-            rect.top() + margin,
-        )
+        self._placeholder.setGeometry(self.viewport().rect())
 
     def _crop_item_at(self, view_pos: QPoint) -> CropRectItem | None:
         for item in self.items(view_pos):

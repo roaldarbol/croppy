@@ -1,16 +1,29 @@
-"""Crop tab: draw crop ROIs on a video and queue one crop job per region.
+"""Crop tab: open several videos at once and crop each independently.
 
-The editor is shown immediately (empty), so the drop/browse target is the canvas
-in the centre and the sidebar on the right is always visible.
+A left "Open videos" list holds every open clip; selecting one shows its preview
++ ROIs in the center editor. Each open video keeps its own crops, compression,
+output folder, and preview frame. Dropping a video (or "Add video…") opens
+another; each editor's "Add Job to Queue" queues that video's crops.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 from loguru import logger
-from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QMessageBox, QVBoxLayout, QWidget
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import (
+    QHBoxLayout,
+    QLabel,
+    QListWidget,
+    QMessageBox,
+    QPushButton,
+    QSplitter,
+    QStackedWidget,
+    QVBoxLayout,
+    QWidget,
+)
 
 from croppy.ffmpeg.crop import default_output_path
 from croppy.ffmpeg.frame import FrameExtractError, extract_frame
@@ -21,8 +34,14 @@ from croppy.jobs.job import CropJob
 from croppy.jobs.queue import JobQueue
 
 
+@dataclass
+class _OpenVideo:
+    path: Path
+    editor: EditorWidget
+
+
 class CropTab(QWidget):
-    """Draw crop ROIs on a video and queue one crop job per region."""
+    """Crop several open videos; the selected one is shown in the editor."""
 
     title_changed = Signal(str)  # window-title hint (e.g. the open file name)
 
@@ -33,16 +52,44 @@ class CropTab(QWidget):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
+        self._controller = controller
         self._queue = queue
-        self._video_path: Path | None = None
+        self._videos: list[_OpenVideo] = []
 
-        layout = QVBoxLayout(self)
+        layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        self._editor = EditorWidget(controller=controller)
-        self._editor.frame_change_requested.connect(self._reload_frame)
-        self._editor.video_change_requested.connect(self.open_video)
-        self._editor.process_requested.connect(self._start_processing)
-        layout.addWidget(self._editor)
+        splitter = QSplitter(Qt.Orientation.Horizontal, self)
+
+        # --- left: open-videos list ---
+        left = QWidget(splitter)
+        lv = QVBoxLayout(left)
+        lv.setContentsMargins(8, 8, 8, 8)
+        lv.addWidget(QLabel("<b>Open videos</b>"))
+        self.videos_list = QListWidget()
+        self.videos_list.currentRowChanged.connect(self._on_selected)
+        lv.addWidget(self.videos_list, 1)
+        lb = QHBoxLayout()
+        self.add_btn = QPushButton("Add video…")
+        self.add_btn.clicked.connect(self._browse_video)
+        self.remove_btn = QPushButton("Remove")
+        self.remove_btn.clicked.connect(self._remove_current)
+        self.remove_btn.setEnabled(False)
+        lb.addWidget(self.add_btn)
+        lb.addWidget(self.remove_btn)
+        lv.addLayout(lb)
+
+        # --- center: an editor per open video, plus an empty placeholder ---
+        self.stack = QStackedWidget(splitter)
+        self._placeholder = EditorWidget(controller=controller)
+        self._placeholder.video_change_requested.connect(self.open_video)
+        self.stack.addWidget(self._placeholder)
+
+        splitter.addWidget(left)
+        splitter.addWidget(self.stack)
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
+        splitter.setSizes([190, 910])
+        layout.addWidget(splitter)
 
     # --- public API ---------------------------------------------------------
 
@@ -56,37 +103,79 @@ class CropTab(QWidget):
             QMessageBox.critical(self, "croppy", f"Could not open <b>{path.name}</b>:<br><br>{exc}")
             return
 
-        self._video_path = path
-        self._editor.load(info, image)
-        self.title_changed.emit(path.name)
+        editor = EditorWidget(controller=self._controller)
+        editor.load(info, image)
+        editor.process_requested.connect(lambda e=editor: self._queue_editor(e))
+        editor.frame_change_requested.connect(lambda n, e=editor: self._reload(e, n))
+        editor.video_change_requested.connect(self.open_video)  # drop another → open it
+
+        self._videos.append(_OpenVideo(path, editor))
+        self.stack.addWidget(editor)
+        self.videos_list.addItem(path.name)
+        self.videos_list.setCurrentRow(len(self._videos) - 1)
+
+    def current_editor(self) -> EditorWidget | None:
+        row = self.videos_list.currentRow()
+        return self._videos[row].editor if 0 <= row < len(self._videos) else None
 
     # --- internals ----------------------------------------------------------
 
-    def _reload_frame(self, frame_number: int) -> None:
-        if self._video_path is None:
+    def _browse_video(self) -> None:
+        # Reuse the placeholder editor's file dialog (covers the empty state too).
+        self._placeholder._browse_input_video()
+
+    def _on_selected(self, row: int) -> None:
+        if 0 <= row < len(self._videos):
+            video = self._videos[row]
+            self.stack.setCurrentWidget(video.editor)
+            self.remove_btn.setEnabled(True)
+            self.title_changed.emit(video.path.name)
+        else:
+            self.stack.setCurrentWidget(self._placeholder)
+            self.remove_btn.setEnabled(False)
+
+    def _remove_current(self) -> None:
+        row = self.videos_list.currentRow()
+        if not (0 <= row < len(self._videos)):
+            return
+        video = self._videos.pop(row)
+        self.stack.removeWidget(video.editor)
+        video.editor.deleteLater()
+        self.videos_list.takeItem(row)
+        if not self._videos:
+            self.stack.setCurrentWidget(self._placeholder)
+            self.remove_btn.setEnabled(False)
+
+    def _video_for(self, editor: EditorWidget) -> _OpenVideo | None:
+        return next((v for v in self._videos if v.editor is editor), None)
+
+    def _reload(self, editor: EditorWidget, frame_number: int) -> None:
+        video = self._video_for(editor)
+        if video is None:
             return
         try:
-            image = extract_frame(self._video_path, frame_number=frame_number)
+            image = extract_frame(video.path, frame_number=frame_number)
         except FrameExtractError as exc:
             logger.warning("Reload frame {} failed: {}", frame_number, exc)
             QMessageBox.warning(
                 self, "croppy", f"Could not extract frame {frame_number}:<br><br>{exc}"
             )
             return
-        self._editor.set_image(image)
+        editor.set_image(image)
 
-    def _start_processing(self) -> None:
-        if self._video_path is None:
+    def _queue_editor(self, editor: EditorWidget) -> None:
+        video = self._video_for(editor)
+        if video is None:
             return
-        regions = self._editor.crop_regions()
+        regions = editor.crop_regions()
         if not regions:
             return
-        settings = self._editor.encode_settings()
-        info = self._editor.info()
-        output_dir = self._editor.output_dir()
+        settings = editor.encode_settings()
+        info = editor.info()
+        output_dir = editor.output_dir()
         for index, region in enumerate(regions):
             output_path = default_output_path(
-                self._video_path,
+                video.path,
                 index,
                 container=settings.container,
                 output_dir=output_dir,
@@ -94,7 +183,7 @@ class CropTab(QWidget):
             job = CropJob(
                 output_path=output_path,
                 duration_seconds=info.duration_seconds,
-                input_path=self._video_path,
+                input_path=video.path,
                 region=region,
                 settings=settings,
             )

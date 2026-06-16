@@ -87,7 +87,7 @@ def test_main_window_writes_to_chosen_output_dir(
     # crop tab's (pristine) compression panel follows the default.
     window._controller.set_default(EncodeSettings(encoder="libx264", preset="ultrafast"))
     window.open_video(local)
-    editor = window.crop_tab._editor
+    editor = window.crop_tab.current_editor()
     assert editor is not None
 
     editor.set_output_dir(out_dir)
