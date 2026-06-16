@@ -12,6 +12,7 @@ from pathlib import Path
 from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QBrush, QColor, QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
+    QFrame,
     QGraphicsItem,
     QGraphicsPixmapItem,
     QGraphicsRectItem,
@@ -38,6 +39,9 @@ class VideoCanvas(QGraphicsView):
         super().__init__(parent)
         self._scene = QGraphicsScene(self)
         self.setScene(self._scene)
+        # No view frame: the surrounding splitter already delimits the area, so
+        # the default QGraphicsView border would read as a doubled outline.
+        self.setFrameShape(QFrame.Shape.NoFrame)
         self.setBackgroundBrush(QBrush(QColor("#1e1e1e")))
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
