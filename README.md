@@ -8,18 +8,19 @@ croppy is organized into three tabs that share one **Compression** panel and one
 - **Combine** — pick videos, drag them into the order you want, and join them into a single file. Queue as many combine jobs as you like.
 - **Compress** — pick any number of videos and re-encode them smaller in one go.
 
-Each tab builds jobs with an **Add to queue** button; a fourth **Jobs** tab collects everything you've staged from any tab. From there you start them — **Start all** or **Start selected** — so you can assemble a batch and fire it off when you're ready. A slim strip along the bottom of the window always shows what's happening (counts + progress), from whichever tab you're on.
+Each tab builds jobs with an **Add to queue** button; a **Jobs** tab collects everything you've staged from any tab. From there you start them — **Start all** or **Start selected** — so you can assemble a batch and fire it off when you're ready. A slim strip along the bottom of the window always shows what's happening (counts + progress), from whichever tab you're on.
 
-Compression settings are shared across all three tabs: set them once and every operation uses them. By default croppy encodes with **NVENC HEVC on the GPU when it's available** and falls back to CPU **libx265** otherwise, so files shrink without you choosing an encoder — but the panel lets you force GPU or CPU and tune quality.
+Compression is **per job**: a **Settings** tab holds the *default* compression, and every operation tab has its own Compression panel seeded from it. Tweak a tab's panel before adding a job and that job captures those settings — so you can queue the same video a few times with small differences and compare. By default croppy encodes with **NVENC HEVC on the GPU when it's available** and falls back to CPU **libx265** otherwise, so files shrink without you choosing an encoder — but the panel lets you force GPU or CPU and tune quality.
 
 ## What you can do
 
-- **Crop**: drop a video onto the canvas (or click to browse); pick the preview frame (handy when a clip starts on black); draw, resize (corner/edge handles), and reposition multiple boxes; each box is an independent output.
-- **Combine**: add videos, drag-reorder them, set the output folder and name, and add a join to the queue. Joins are written as fragmented mp4 to a `.partial.mp4` and renamed only on success, so an interrupted run leaves a playable, clearly-partial file.
-- **Compress**: add videos and queue one compress job each; outputs are named `<name>_compressed.mp4`.
+- **Crop**: drop a video onto the canvas (or click to browse — use the floating **Change video…** button to swap it later); pick the preview frame (handy when a clip starts on black); draw, resize (corner/edge handles), and reposition multiple boxes; each box is an independent output.
+- **Combine**: drop or add videos, drag-reorder them, set the output folder and name, and add a join to the queue. Joins are written as fragmented mp4 to a `.partial.mp4` and renamed only on success, so an interrupted run leaves a playable, clearly-partial file.
+- **Compress**: drop or add videos and queue one compress job each (named `<name>_compressed.mp4`, auto-numbered if you queue the same source again). **Duplicate selected** copies rows; the list stays put after queueing so you can re-queue with tweaked settings.
 - **Jobs**: see every staged job from every tab (with a crop/combine/compress tag), start all or just the ones you select, cancel a running job, and remove or clear finished rows.
+- **Settings**: set the default compression every tab starts from.
 - Run several jobs at once with the **Parallel** toggle on the Jobs tab — useful for keeping an NVENC GPU's encode engines busy.
-- Tune the shared **Compression** panel: container (`mp4` / `mkv` / `mov`), encoder (Auto / NVENC HEVC / CPU libx265 / CPU libx264), NVENC CQ + preset, CPU CRF + preset + tune + pixel format, audio mode, audio bitrate, and faststart.
+- Tune any **Compression** panel: container (`mp4` / `mkv` / `mov`), encoder (Auto / NVENC HEVC / CPU libx265 / CPU libx264), NVENC CQ + preset, CPU CRF + preset + tune + pixel format, audio mode, audio bitrate, and faststart.
 
 ## Install
 
@@ -54,7 +55,7 @@ On the **Crop** tab, once a video is open:
 - **Reload** in the *Preview frame* group re-extracts the preview at a different frame number — useful for finding a representative moment.
 - **Add to queue** stages one job per box (named `<original_stem>_crop1.<ext>`, `_crop2.<ext>`, …) on the Jobs tab.
 
-On the **Combine** and **Compress** tabs, **Add videos…** builds a list — each row is a thumbnail plus the file's resolution, fps, duration, and frame count. Drag to reorder, select rows and **Remove selected** (or press Delete) to prune. Combine joins the list into one file in the order shown; Compress stages one job per video. Both let you choose an **Output folder** (Combine also takes a file name).
+On the **Combine** and **Compress** tabs, drop videos onto the list (or **Add videos…**) — each row is a thumbnail plus the file's resolution, fps, duration, and frame count. Drag to reorder, select rows and **Remove selected** (or press Delete) to prune; Compress also has **Duplicate selected**. Combine joins the list into one file in the order shown; Compress stages one job per video. Both let you choose an **Output folder** (Combine also takes a file name). Tweak the tab's **Compression** panel first if you want this batch to differ from the default.
 
 Staged jobs collect on the **Jobs** tab. Hit **Start all** or tick a few rows and **Start selected**; **Cancel** stops a running job, **Remove selected** drops staged ones, and **Clear finished** tidies completed rows away. The bottom strip summarizes it all from any tab.
 
