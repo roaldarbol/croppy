@@ -43,7 +43,7 @@ def main(
             "-v",
             "--verbose",
             count=True,
-            help="Increase log verbosity. Pass once for INFO, twice for DEBUG.",
+            help="Increase log verbosity from the default INFO to DEBUG.",
         ),
     ] = 0,
     _version: Annotated[

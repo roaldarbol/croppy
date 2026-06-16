@@ -8,12 +8,12 @@ from loguru import logger
 
 
 def configure(verbosity: int = 0) -> None:
-    """Configure loguru sinks based on a verbosity count (0 = WARNING, 1 = INFO, 2+ = DEBUG)."""
-    level = "WARNING"
-    if verbosity == 1:
-        level = "INFO"
-    elif verbosity >= 2:
-        level = "DEBUG"
+    """Configure loguru sinks based on a verbosity count.
+
+    ``0`` = INFO (the default, so normal activity is visible in the terminal),
+    ``1+`` = DEBUG.
+    """
+    level = "DEBUG" if verbosity >= 1 else "INFO"
 
     logger.remove()
     logger.add(
