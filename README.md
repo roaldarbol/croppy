@@ -8,15 +8,17 @@ croppy is organized into three tabs that share one **Compression** panel and one
 - **Combine** — pick videos, drag them into the order you want, and join them into a single file. Queue as many combine jobs as you like.
 - **Compress** — pick any number of videos and re-encode them smaller in one go.
 
+Each tab builds jobs with an **Add to queue** button; a fourth **Jobs** tab collects everything you've staged from any tab. From there you start them — **Start all** or **Start selected** — so you can assemble a batch and fire it off when you're ready. A slim strip along the bottom of the window always shows what's happening (counts + progress), from whichever tab you're on.
+
 Compression settings are shared across all three tabs: set them once and every operation uses them. By default croppy encodes with **NVENC HEVC on the GPU when it's available** and falls back to CPU **libx265** otherwise, so files shrink without you choosing an encoder — but the panel lets you force GPU or CPU and tune quality.
 
 ## What you can do
 
-- **Crop**: open a video by drag-and-drop or the file picker; pick the preview frame (handy when a clip starts on black); draw, resize (corner/edge handles), and reposition multiple boxes; each box is an independent output.
-- **Combine**: add videos, drag-reorder them, set the output folder and name, and queue a join. Joins are written as fragmented mp4 to a `.partial.mp4` and renamed only on success, so an interrupted run leaves a playable, clearly-partial file.
+- **Crop**: drop a video onto the canvas (or click to browse); pick the preview frame (handy when a clip starts on black); draw, resize (corner/edge handles), and reposition multiple boxes; each box is an independent output.
+- **Combine**: add videos, drag-reorder them, set the output folder and name, and add a join to the queue. Joins are written as fragmented mp4 to a `.partial.mp4` and renamed only on success, so an interrupted run leaves a playable, clearly-partial file.
 - **Compress**: add videos and queue one compress job each; outputs are named `<name>_compressed.mp4`.
-- Watch every job (from any tab) encode in real time in the shared progress dock and cancel any of them mid-flight.
-- Run several jobs at once with the **Parallel** toggle in the progress dock — useful for keeping an NVENC GPU's encode engines busy.
+- **Jobs**: see every staged job from every tab (with a crop/combine/compress tag), start all or just the ones you select, cancel a running job, and remove or clear finished rows.
+- Run several jobs at once with the **Parallel** toggle on the Jobs tab — useful for keeping an NVENC GPU's encode engines busy.
 - Tune the shared **Compression** panel: container (`mp4` / `mkv` / `mov`), encoder (Auto / NVENC HEVC / CPU libx265 / CPU libx264), NVENC CQ + preset, CPU CRF + preset + tune + pixel format, audio mode, audio bitrate, and faststart.
 
 ## Install
@@ -50,11 +52,11 @@ On the **Crop** tab, once a video is open:
 - **Click a box** to select it; its handles appear. Drag the body to move it, drag a handle to resize. The selected box is also highlighted in the sidebar list (and vice-versa).
 - **Delete** or **Backspace** removes the selected box.
 - **Reload** in the *Preview frame* group re-extracts the preview at a different frame number — useful for finding a representative moment.
-- **Process** queues one ffmpeg job per box. Outputs are named `<original_stem>_crop1.<ext>`, `_crop2.<ext>`, …
+- **Add to queue** stages one job per box (named `<original_stem>_crop1.<ext>`, `_crop2.<ext>`, …) on the Jobs tab.
 
-On the **Combine** and **Compress** tabs, **Add videos…** to build a list (each row shows a thumbnail), drag to reorder, select rows and **Remove selected** or press Delete to prune. Combine joins the list into one file in the order shown; Compress queues one job per video. Both let you choose an **Output folder** (Combine also takes a file name).
+On the **Combine** and **Compress** tabs, **Add videos…** builds a list — each row is a thumbnail plus the file's resolution, fps, duration, and frame count. Drag to reorder, select rows and **Remove selected** (or press Delete) to prune. Combine joins the list into one file in the order shown; Compress stages one job per video. Both let you choose an **Output folder** (Combine also takes a file name).
 
-Every job, whatever tab it came from, shows up in the progress dock at the bottom — progress bar, status, **Cancel** — and **Clear finished** tidies completed rows away.
+Staged jobs collect on the **Jobs** tab. Hit **Start all** or tick a few rows and **Start selected**; **Cancel** stops a running job, **Remove selected** drops staged ones, and **Clear finished** tidies completed rows away. The bottom strip summarizes it all from any tab.
 
 ## Contributing
 
