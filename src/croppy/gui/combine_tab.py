@@ -56,7 +56,7 @@ class CombineTab(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         splitter = QSplitter(Qt.Orientation.Horizontal, self)
 
-        self.video_list = VideoList(splitter)
+        self.video_list = VideoList(parent=splitter)
         self.video_list.changed.connect(self._on_list_changed)
         splitter.addWidget(self.video_list)
 

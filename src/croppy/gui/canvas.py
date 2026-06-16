@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QGraphicsScene,
     QGraphicsView,
     QLabel,
+    QPushButton,
     QWidget,
 )
 
@@ -54,11 +55,17 @@ class VideoCanvas(QGraphicsView):
         self._draft_origin: QPointF | None = None
 
         # Centered prompt shown until a video is loaded.
-        self._placeholder = QLabel("Drop a video here\nor click to browse", self)
+        self._placeholder = QLabel("Drop a video here\nor click to browse", self.viewport())
         self._placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._placeholder.setStyleSheet("color: #888; font-size: 16px;")
         self._placeholder.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-        self._position_placeholder()
+
+        # Floating "change video" button shown once a video is loaded.
+        self._change_btn = QPushButton("Change video…", self.viewport())
+        self._change_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._change_btn.clicked.connect(self.browse_requested)
+        self._change_btn.hide()
+        self._position_overlays()
 
         self._scene.selectionChanged.connect(self._emit_selection)
 
@@ -76,6 +83,8 @@ class VideoCanvas(QGraphicsView):
             self._pixmap_item.setPixmap(pixmap)
         self._scene.setSceneRect(QRectF(0, 0, image.width(), image.height()))
         self._placeholder.hide()
+        self._change_btn.show()
+        self._position_overlays()
         self._fit()
 
     def image_size(self) -> tuple[int, int]:
@@ -124,7 +133,7 @@ class VideoCanvas(QGraphicsView):
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
-        self._position_placeholder()
+        self._position_overlays()
         self._fit()
 
     def showEvent(self, event) -> None:
@@ -206,8 +215,15 @@ class VideoCanvas(QGraphicsView):
             return
         self.fitInView(self._pixmap_item, Qt.AspectRatioMode.KeepAspectRatio)
 
-    def _position_placeholder(self) -> None:
-        self._placeholder.setGeometry(self.viewport().rect())
+    def _position_overlays(self) -> None:
+        rect = self.viewport().rect()
+        self._placeholder.setGeometry(rect)
+        self._change_btn.adjustSize()
+        margin = 10
+        self._change_btn.move(
+            rect.right() - self._change_btn.width() - margin,
+            rect.top() + margin,
+        )
 
     def _crop_item_at(self, view_pos: QPoint) -> CropRectItem | None:
         for item in self.items(view_pos):

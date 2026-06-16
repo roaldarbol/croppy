@@ -1,9 +1,9 @@
 """Reorderable list of videos, shared by Combine and Compress.
 
-"Add videos…" multi-selects files; rows can be drag-reordered (Combine cares
-about order) and removed. Each row is a two-column entry: a thumbnail on the
-left and a description (name + resolution · fps · duration · frames) on the
-right, rendered by :class:`_VideoItemDelegate`.
+The list area is itself a drop zone: drop video files on it or click the empty
+prompt to browse. Floating buttons (Add / Remove / optional Duplicate) hover over
+the list. Each row is a two-column entry — thumbnail | name + resolution · fps ·
+duration · frames — rendered by :class:`_VideoItemDelegate`.
 """
 
 from __future__ import annotations
@@ -16,13 +16,14 @@ from PySide6.QtGui import QColor, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
+    QFrame,
     QHBoxLayout,
+    QLabel,
     QListWidget,
     QListWidgetItem,
     QPushButton,
     QStyle,
     QStyledItemDelegate,
-    QVBoxLayout,
     QWidget,
 )
 
@@ -60,7 +61,6 @@ class _VideoItemDelegate(QStyledItemDelegate):
             painter.fillRect(option.rect, option.palette.highlight())
 
         rect = option.rect
-        # Thumbnail column.
         thumb_box = QRect(rect.left() + _PAD, rect.top() + _PAD, _THUMB.width(), _THUMB.height())
         painter.fillRect(thumb_box, QColor("#1e1e1e"))
         pix = index.data(_PIX_ROLE)
@@ -69,7 +69,6 @@ class _VideoItemDelegate(QStyledItemDelegate):
             y = thumb_box.top() + (thumb_box.height() - pix.height()) // 2
             painter.drawPixmap(x, y, pix)
 
-        # Text column.
         text_left = thumb_box.right() + 2 * _PAD
         text_rect = QRect(
             text_left, rect.top() + _PAD, rect.right() - text_left - _PAD, rect.height() - 2 * _PAD
@@ -109,40 +108,98 @@ class _VideoItemDelegate(QStyledItemDelegate):
         painter.restore()
 
 
+class _DropListWidget(QListWidget):
+    """QListWidget that keeps internal-move reorder but also accepts file drops
+    and reports clicks on the empty area."""
+
+    files_dropped = Signal(list)  # list[Path]
+    browse_requested = Signal()
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setAcceptDrops(True)
+
+    def dragEnterEvent(self, event) -> None:
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event) -> None:
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            super().dragMoveEvent(event)
+
+    def dropEvent(self, event) -> None:
+        if event.mimeData().hasUrls():
+            paths = [Path(u.toLocalFile()) for u in event.mimeData().urls() if u.isLocalFile()]
+            self.files_dropped.emit(paths)
+            event.acceptProposedAction()
+        else:
+            super().dropEvent(event)  # internal reorder
+
+    def mousePressEvent(self, event) -> None:
+        if (
+            event.button() == Qt.MouseButton.LeftButton
+            and self.itemAt(event.pos()) is None
+            and self.count() == 0
+        ):
+            self.browse_requested.emit()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+
 class VideoList(QWidget):
     """A drag-reorderable list of video paths with thumbnails and details."""
 
     changed = Signal()
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, with_duplicate: bool = False, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._last_dir = ""
 
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.setSpacing(6)
-
-        buttons = QHBoxLayout()
-        self.add_btn = QPushButton("Add videos…")
-        self.add_btn.clicked.connect(self.open_dialog)
-        self.remove_btn = QPushButton("Remove selected")
-        self.remove_btn.clicked.connect(self.remove_selected)
-        self.remove_btn.setEnabled(False)
-        buttons.addWidget(self.add_btn)
-        buttons.addWidget(self.remove_btn)
-        buttons.addStretch(1)
-        outer.addLayout(buttons)
-
-        self._list = QListWidget()
+        self._list = _DropListWidget(self)
         self._list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self._list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
         self._list.setItemDelegate(_VideoItemDelegate(self._list))
         self._list.setUniformItemSizes(True)
         self._list.setSpacing(1)
         self._list.itemSelectionChanged.connect(self._on_selection_changed)
-        # Reordering via drag-and-drop moves rows in the model.
         self._list.model().rowsMoved.connect(self.changed)
-        outer.addWidget(self._list, 1)
+        self._list.files_dropped.connect(self.add_paths)
+        self._list.browse_requested.connect(self.open_dialog)
+
+        # Centered prompt shown only when the list is empty.
+        self._prompt = QLabel("Drop videos here\nor click to browse", self._list.viewport())
+        self._prompt.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._prompt.setStyleSheet("color: #888; font-size: 16px;")
+        self._prompt.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
+        # Floating action buttons hovering over the list.
+        self._overlay = QFrame(self)
+        self._overlay.setStyleSheet(
+            "QFrame { background: rgba(40, 40, 40, 200); border-radius: 8px; }"
+        )
+        ob = QHBoxLayout(self._overlay)
+        ob.setContentsMargins(8, 6, 8, 6)
+        ob.setSpacing(6)
+        self.add_btn = QPushButton("Add videos…")
+        self.add_btn.clicked.connect(self.open_dialog)
+        self.remove_btn = QPushButton("Remove selected")
+        self.remove_btn.clicked.connect(self.remove_selected)
+        self.remove_btn.setEnabled(False)
+        ob.addWidget(self.add_btn)
+        ob.addWidget(self.remove_btn)
+        self.duplicate_btn: QPushButton | None = None
+        if with_duplicate:
+            self.duplicate_btn = QPushButton("Duplicate selected")
+            self.duplicate_btn.clicked.connect(self.duplicate_selected)
+            self.duplicate_btn.setEnabled(False)
+            ob.addWidget(self.duplicate_btn)
+
+        self._update_empty()
 
     # --- public API ---------------------------------------------------------
 
@@ -158,20 +215,16 @@ class VideoList(QWidget):
         for path in paths:
             if not is_accepted_video(path):
                 continue
-            item = QListWidgetItem()
-            item.setData(_PATH_ROLE, path)
-            item.setData(_NAME_ROLE, path.name)
-            item.setData(_DETAIL_ROLE, self._detail(path))
-            item.setData(_PIX_ROLE, self._thumbnail(path))
-            item.setToolTip(str(path))
-            self._list.addItem(item)
+            self._list.addItem(self._make_item(path, self._detail(path), self._thumbnail(path)))
             added = True
         if added:
+            self._update_empty()
             self.changed.emit()
 
     def clear(self) -> None:
         if self._list.count():
             self._list.clear()
+            self._update_empty()
             self.changed.emit()
 
     def remove_selected(self) -> None:
@@ -179,6 +232,22 @@ class VideoList(QWidget):
         for row in rows:
             self._list.takeItem(row)
         if rows:
+            self._update_empty()
+            self.changed.emit()
+
+    def duplicate_selected(self) -> None:
+        """Insert a copy of each selected row right after it."""
+        rows = sorted(self._list.row(i) for i in self._list.selectedItems())
+        # Walk from the bottom so earlier insertions don't shift later indices.
+        inserted = False
+        for row in reversed(rows):
+            src = self._list.item(row)
+            clone = self._make_item(
+                src.data(_PATH_ROLE), src.data(_DETAIL_ROLE), src.data(_PIX_ROLE)
+            )
+            self._list.insertItem(row + 1, clone)
+            inserted = True
+        if inserted:
             self.changed.emit()
 
     def open_dialog(self) -> None:
@@ -191,7 +260,18 @@ class VideoList(QWidget):
         self._last_dir = str(paths[0].parent)
         self.add_paths(paths)
 
-    # --- internals ----------------------------------------------------------
+    # --- Qt overrides -------------------------------------------------------
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._list.setGeometry(self.rect())
+        self._prompt.setGeometry(self._list.viewport().rect())
+        self._overlay.adjustSize()
+        rect = self.rect()
+        self._overlay.move(
+            rect.center().x() - self._overlay.width() // 2,
+            rect.bottom() - self._overlay.height() - 10,
+        )
 
     def keyPressEvent(self, event) -> None:
         if event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
@@ -200,8 +280,25 @@ class VideoList(QWidget):
             return
         super().keyPressEvent(event)
 
+    # --- internals ----------------------------------------------------------
+
+    def _make_item(self, path: Path, detail: str, pix: QPixmap) -> QListWidgetItem:
+        item = QListWidgetItem()
+        item.setData(_PATH_ROLE, path)
+        item.setData(_NAME_ROLE, path.name)
+        item.setData(_DETAIL_ROLE, detail)
+        item.setData(_PIX_ROLE, pix)
+        item.setToolTip(str(path))
+        return item
+
     def _on_selection_changed(self) -> None:
-        self.remove_btn.setEnabled(bool(self._list.selectedItems()))
+        has_sel = bool(self._list.selectedItems())
+        self.remove_btn.setEnabled(has_sel)
+        if self.duplicate_btn is not None:
+            self.duplicate_btn.setEnabled(has_sel)
+
+    def _update_empty(self) -> None:
+        self._prompt.setVisible(self._list.count() == 0)
 
     def _detail(self, path: Path) -> str:
         try:

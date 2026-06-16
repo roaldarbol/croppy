@@ -72,6 +72,25 @@ def test_clear_emits_and_empties(qtbot, qapp, test_video: Path, tmp_path: Path) 
     assert vl.paths() == []
 
 
+def test_duplicate_selected(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
+    vl = VideoList(with_duplicate=True)
+    qtbot.addWidget(vl)
+    paths = _two_videos(test_video, tmp_path)
+    vl.add_paths(paths)
+    vl._list.setCurrentRow(0)
+    vl.duplicate_selected()
+    # The duplicate is inserted right after the original.
+    assert vl.paths() == [paths[0], paths[0], paths[1]]
+
+
+def test_dropped_files_are_added(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
+    vl = VideoList()
+    qtbot.addWidget(vl)
+    paths = _two_videos(test_video, tmp_path)
+    vl._list.files_dropped.emit(paths)
+    assert vl.paths() == paths
+
+
 def test_remove_button_disabled_until_selection(
     qtbot, qapp, test_video: Path, tmp_path: Path
 ) -> None:

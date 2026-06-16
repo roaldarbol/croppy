@@ -73,6 +73,7 @@ def test_compress_tab_queues_one_job_per_video(
     qtbot, qapp, test_video: Path, tmp_path: Path
 ) -> None:
     queue = MagicMock()
+    queue.jobs.return_value = []
     tab = CompressTab(CompressionController(), queue)
     qtbot.addWidget(tab)
 
@@ -89,13 +90,33 @@ def test_compress_tab_queues_one_job_per_video(
     jobs = [call.args[0] for call in queue.submit.call_args_list]
     assert all(isinstance(j, CompressJob) for j in jobs)
     assert jobs[0].output_path == out_dir / "clip0_compressed.mp4"
-    assert tab.video_list.count() == 0
+    # The list is kept so you can re-queue with tweaked settings.
+    assert tab.video_list.count() == 3
+
+
+def test_compress_tab_uniquifies_repeat_outputs(
+    qtbot, qapp, test_video: Path, tmp_path: Path
+) -> None:
+    submitted: list = []
+    queue = MagicMock()
+    queue.jobs.side_effect = lambda: list(submitted)
+    queue.submit.side_effect = lambda job: submitted.append(job)
+    tab = CompressTab(CompressionController(), queue)
+    qtbot.addWidget(tab)
+    tab.video_list.add_paths(_copies(test_video, tmp_path, 1))
+    tab.output_picker.set_output_dir(tmp_path)
+
+    tab._queue_jobs()  # clip0_compressed.mp4
+    tab._queue_jobs()  # clip0_compressed-2.mp4 (first is already queued)
+    outs = [j.output_path.name for j in submitted]
+    assert outs == ["clip0_compressed.mp4", "clip0_compressed-2.mp4"]
 
 
 def test_compress_tab_defaults_output_next_to_input(
     qtbot, qapp, test_video: Path, tmp_path: Path
 ) -> None:
     queue = MagicMock()
+    queue.jobs.return_value = []
     tab = CompressTab(CompressionController(), queue)
     qtbot.addWidget(tab)
     paths = _copies(test_video, tmp_path, 1)

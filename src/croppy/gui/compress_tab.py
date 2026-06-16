@@ -32,6 +32,16 @@ def _duration(path: Path) -> float:
         return 0.0
 
 
+def _unique_path(base: Path, taken: set[Path]) -> Path:
+    """Return ``base`` or ``base-2``, ``base-3``, … avoiding ``taken`` and disk."""
+    candidate = base
+    i = 2
+    while candidate in taken or candidate.exists():
+        candidate = base.with_name(f"{base.stem}-{i}{base.suffix}")
+        i += 1
+    return candidate
+
+
 class CompressTab(QWidget):
     """Compress N videos with the shared compression settings."""
 
@@ -48,7 +58,7 @@ class CompressTab(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         splitter = QSplitter(Qt.Orientation.Horizontal, self)
 
-        self.video_list = VideoList(splitter)
+        self.video_list = VideoList(with_duplicate=True, parent=splitter)
         self.video_list.changed.connect(self._on_list_changed)
         splitter.addWidget(self.video_list)
 
@@ -97,11 +107,15 @@ class CompressTab(QWidget):
         settings = self.compression.settings()
         output_dir = self.output_picker.output_dir() if self.output_picker.has_dir() else None
 
-        submitted = False
+        # Avoid clobbering outputs already queued or on disk, so the same source
+        # can be queued again with different settings to compare the results.
+        taken = {job.output_path for job in self._queue.jobs()}
         for path in paths:
-            output_path = default_compress_output_path(
+            base = default_compress_output_path(
                 path, container=settings.container, output_dir=output_dir
             )
+            output_path = _unique_path(base, taken)
+            taken.add(output_path)
             job = CompressJob(
                 output_path=output_path,
                 duration_seconds=_duration(path),
@@ -109,7 +123,5 @@ class CompressTab(QWidget):
                 settings=settings,
             )
             self._queue.submit(job)
-            submitted = True
-
-        if submitted:
-            self.video_list.clear()
+        # The list is kept so you can tweak compression and queue again to
+        # compare variants.

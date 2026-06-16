@@ -16,7 +16,6 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
-    QLineEdit,
     QListWidget,
     QListWidgetItem,
     QPushButton,
@@ -79,9 +78,6 @@ class EditorWidget(QWidget):
             f"{info.fps:.2f} fps · "
             f"{info.duration_seconds:.2f}s{nframes}"
         )
-        self.input_path_edit.setText(str(info.path))
-        self.input_path_edit.setToolTip(str(info.path))
-        self.input_path_edit.setCursorPosition(0)
         if not self.output_picker.has_dir():
             self.output_picker.set_output_dir(info.path.parent)
 
@@ -144,19 +140,6 @@ class EditorWidget(QWidget):
         self.summary.setTextFormat(Qt.TextFormat.RichText)
         self.summary.setStyleSheet("color: #888;")
         v.addWidget(self.summary)
-
-        input_group = QGroupBox("Input video")
-        ig = QHBoxLayout(input_group)
-        ig.setContentsMargins(8, 8, 8, 8)
-        ig.setSpacing(6)
-        self.input_path_edit = QLineEdit("")
-        self.input_path_edit.setReadOnly(True)
-        self.input_path_edit.setCursorPosition(0)
-        self.browse_input_btn = QPushButton("Browse…")
-        self.browse_input_btn.clicked.connect(self._browse_input_video)
-        ig.addWidget(self.input_path_edit, 1)
-        ig.addWidget(self.browse_input_btn, 0)
-        v.addWidget(input_group)
 
         self.output_picker = OutputFolderPicker()
         v.addWidget(self.output_picker)
