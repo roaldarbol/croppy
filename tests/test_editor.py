@@ -76,6 +76,38 @@ def test_editor_load_enables_controls(qtbot, qapp, test_video: Path) -> None:
     assert editor.reload_btn.isEnabled()
 
 
+def test_load_new_video_clears_crops_and_resets_compression(
+    qtbot, qapp, test_video: Path
+) -> None:
+    from PySide6.QtCore import QRectF
+
+    from croppy.models import EncodeSettings
+
+    editor = EditorWidget()
+    qtbot.addWidget(editor)
+    info = probe(test_video)
+    editor.load(info, extract_frame(test_video, 1))
+
+    editor.canvas.add_crop(QRectF(0, 0, 100, 100))
+    editor.compression.settings_panel.cq_spin.setValue(EncodeSettings().cq + 9)
+    assert len(editor.canvas.crops()) == 1
+
+    # Loading another video must drop the old crops and reset compression.
+    editor.load(info, extract_frame(test_video, 5))
+    assert editor.canvas.crops() == []
+    assert editor.encode_settings().cq == EncodeSettings().cq
+
+
+def test_load_new_video_keeps_output_dir(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
+    editor = EditorWidget()
+    qtbot.addWidget(editor)
+    info = probe(test_video)
+    editor.load(info, extract_frame(test_video, 1))
+    editor.set_output_dir(tmp_path)
+    editor.load(info, extract_frame(test_video, 5))
+    assert editor.output_dir() == tmp_path  # output folder is carried over
+
+
 def test_canvas_drop_emits_video_dropped(qtbot, qapp, test_video: Path) -> None:
     from PySide6.QtCore import QMimeData, QUrl
     from PySide6.QtGui import QDropEvent

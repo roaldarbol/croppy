@@ -17,6 +17,17 @@ from croppy.gui.settings_panel import CollapsibleSection, SettingsPanel
 from croppy.models import EncodeSettings
 
 
+def summarize_settings(settings: EncodeSettings) -> str:
+    """A compact one-line description, e.g. ``Auto · cq 28 · mp4``."""
+    if settings.encoder in ("auto", "nvenc_hevc"):
+        enc = "Auto" if settings.encoder == "auto" else "HEVC"
+        quality = f"cq {settings.cq}"
+    else:
+        enc = "x265" if settings.encoder == "libx265" else "x264"
+        quality = f"crf {settings.crf}"
+    return f"{enc} · {quality} · {settings.container}"
+
+
 class CompressionController(QObject):
     """Holds the persisted *default* :class:`EncodeSettings` shared as a seed."""
 
@@ -73,6 +84,11 @@ class CompressionPanel(QWidget):
 
     def set_settings(self, settings: EncodeSettings) -> None:
         self.settings_panel.set_settings(settings)
+
+    def reset_to(self, settings: EncodeSettings) -> None:
+        """Set ``settings`` and mark the panel pristine again (follows the default)."""
+        self.settings_panel.set_settings(settings)
+        self._pristine = True
 
     def _on_user_edit(self, settings: EncodeSettings) -> None:
         self._pristine = False

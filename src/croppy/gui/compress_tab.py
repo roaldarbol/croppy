@@ -1,4 +1,9 @@
-"""Compress tab: re-encode each selected video smaller, one job per file."""
+"""Compress tab: re-encode each video smaller, one job per file.
+
+Compression is per video: each row carries its own settings (seeded from the
+default when added). Selecting a row shows its settings in the panel; editing
+the panel writes back to the selected row(s) only.
+"""
 
 from __future__ import annotations
 
@@ -17,11 +22,16 @@ from PySide6.QtWidgets import (
 
 from croppy.ffmpeg.compress import default_compress_output_path
 from croppy.ffmpeg.probe import ProbeError, probe
-from croppy.gui.compression_panel import CompressionController, CompressionPanel
+from croppy.gui.compression_panel import (
+    CompressionController,
+    CompressionPanel,
+    summarize_settings,
+)
 from croppy.gui.output_picker import OutputFolderPicker
 from croppy.gui.video_list import VideoList
 from croppy.jobs.job import CompressJob
 from croppy.jobs.queue import JobQueue
+from croppy.models import EncodeSettings
 
 
 def _duration(path: Path) -> float:
@@ -43,7 +53,7 @@ def _unique_path(base: Path, taken: set[Path]) -> Path:
 
 
 class CompressTab(QWidget):
-    """Compress N videos with the shared compression settings."""
+    """Compress N videos, each with its own compression settings."""
 
     def __init__(
         self,
@@ -52,7 +62,9 @@ class CompressTab(QWidget):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
+        self._controller = controller
         self._queue = queue
+        self._applying = False  # guard panel→item→panel feedback
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -60,6 +72,8 @@ class CompressTab(QWidget):
 
         self.video_list = VideoList(with_duplicate=True, parent=splitter)
         self.video_list.changed.connect(self._on_list_changed)
+        self.video_list.items_added.connect(self._seed_new_items)
+        self.video_list.selection_changed.connect(self._load_selection_into_panel)
         splitter.addWidget(self.video_list)
 
         side = QWidget(splitter)
@@ -70,7 +84,8 @@ class CompressTab(QWidget):
 
         hint = QLabel(
             "Add videos to compress. Each becomes <name>_compressed in the output "
-            "folder (or next to the original if no folder is chosen)."
+            "folder (or next to the original). Compression below applies to the "
+            "selected video(s) only; new videos start from the default."
         )
         hint.setWordWrap(True)
         hint.setStyleSheet("color: #888;")
@@ -79,7 +94,10 @@ class CompressTab(QWidget):
         self.output_picker = OutputFolderPicker()
         v.addWidget(self.output_picker)
 
-        self.compression = CompressionPanel(initial=controller.default(), controller=controller)
+        # Per-item editor: no controller-follow; it mirrors the selected row.
+        self.compression = CompressionPanel(initial=controller.default(), expanded=True)
+        self.compression.settings_changed.connect(self._apply_panel_to_selection)
+        self.compression.setEnabled(False)
         v.addWidget(self.compression)
 
         v.addStretch(1)
@@ -95,6 +113,35 @@ class CompressTab(QWidget):
         splitter.setSizes([800, 300])
         layout.addWidget(splitter)
 
+    # --- per-item settings --------------------------------------------------
+
+    def _seed_new_items(self, rows: list[int]) -> None:
+        default = self._controller.default()
+        for row in rows:
+            self.video_list.set_item_data(row, default, summarize_settings(default))
+
+    def _load_selection_into_panel(self) -> None:
+        rows = self.video_list.selected_rows()
+        if not rows:
+            self.compression.setEnabled(False)
+            return
+        self.compression.setEnabled(True)
+        current = self.video_list.current_row()
+        settings = self.video_list.item_data(current if current in rows else rows[0])
+        if isinstance(settings, EncodeSettings):
+            self._applying = True
+            try:
+                self.compression.set_settings(settings)
+            finally:
+                self._applying = False
+
+    def _apply_panel_to_selection(self, settings: EncodeSettings) -> None:
+        if self._applying:
+            return
+        summary = summarize_settings(settings)
+        for row in self.video_list.selected_rows():
+            self.video_list.set_item_data(row, settings, summary)
+
     # --- internals ----------------------------------------------------------
 
     def _on_list_changed(self) -> None:
@@ -104,13 +151,15 @@ class CompressTab(QWidget):
         paths = self.video_list.paths()
         if not paths:
             return
-        settings = self.compression.settings()
         output_dir = self.output_picker.output_dir() if self.output_picker.has_dir() else None
 
         # Avoid clobbering outputs already queued or on disk, so the same source
         # can be queued again with different settings to compare the results.
         taken = {job.output_path for job in self._queue.jobs()}
-        for path in paths:
+        for row, path in enumerate(paths):
+            settings = self.video_list.item_data(row)
+            if not isinstance(settings, EncodeSettings):
+                settings = self._controller.default()
             base = default_compress_output_path(
                 path, container=settings.container, output_dir=output_dir
             )

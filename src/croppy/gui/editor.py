@@ -67,8 +67,15 @@ class EditorWidget(QWidget):
     # --- public API ---------------------------------------------------------
 
     def load(self, info: VideoInfo, image: QImage) -> None:
-        """Populate the editor with a probed video and its preview frame."""
+        """Populate the editor with a probed video and its preview frame.
+
+        A new video starts clean: previous crops are cleared and the compression
+        panel is reset to the default. The output folder is intentionally kept.
+        """
         self._info = info
+        # Crops and compression belong to the old clip — drop them.
+        self.canvas.clear_crops()
+        self.compression.reset_to(self._controller.default())
         self.canvas.set_image(image)
 
         nframes = f" · {info.nb_frames} frames" if info.nb_frames is not None else ""

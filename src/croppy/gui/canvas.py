@@ -108,6 +108,15 @@ class VideoCanvas(QGraphicsView):
         self.crops_changed.emit()
         return item
 
+    def clear_crops(self) -> None:
+        """Remove all crop rectangles (e.g. when a different video is loaded)."""
+        if not self._crops:
+            return
+        for item in list(self._crops):
+            self._scene.removeItem(item)
+        self._crops.clear()
+        self.crops_changed.emit()
+
     def remove_crop(self, item: CropRectItem) -> None:
         if item not in self._crops:
             return

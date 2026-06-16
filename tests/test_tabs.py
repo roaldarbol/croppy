@@ -112,6 +112,53 @@ def test_compress_tab_uniquifies_repeat_outputs(
     assert outs == ["clip0_compressed.mp4", "clip0_compressed-2.mp4"]
 
 
+def test_compress_per_item_settings_are_independent(
+    qtbot, qapp, test_video: Path, tmp_path: Path
+) -> None:
+    queue = MagicMock()
+    queue.jobs.return_value = []
+    controller = CompressionController()
+    tab = CompressTab(controller, queue)
+    qtbot.addWidget(tab)
+
+    paths = _copies(test_video, tmp_path, 2)
+    tab.video_list.add_paths(paths)  # both seeded with the default
+    default_cq = controller.default().cq
+
+    # Edit only the first row's compression.
+    tab.video_list._list.setCurrentRow(0)
+    tab.compression.settings_panel.cq_spin.setValue(default_cq + 5)
+
+    assert tab.video_list.item_data(0).cq == default_cq + 5
+    assert tab.video_list.item_data(1).cq == default_cq  # untouched
+
+    tab.output_picker.set_output_dir(tmp_path)
+    tab._queue_jobs()
+    jobs = [call.args[0] for call in queue.submit.call_args_list]
+    assert jobs[0].settings.cq == default_cq + 5
+    assert jobs[1].settings.cq == default_cq
+
+
+def test_compress_panel_follows_selection(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
+    queue = MagicMock()
+    queue.jobs.return_value = []
+    controller = CompressionController()
+    tab = CompressTab(controller, queue)
+    qtbot.addWidget(tab)
+    paths = _copies(test_video, tmp_path, 2)
+    tab.video_list.add_paths(paths)
+    base = controller.default().cq
+
+    tab.video_list._list.setCurrentRow(0)
+    tab.compression.settings_panel.cq_spin.setValue(base + 7)
+    # Switching to the other row shows its (unchanged) settings.
+    tab.video_list._list.setCurrentRow(1)
+    assert tab.compression.settings().cq == base
+    # Back to the first shows the edited value.
+    tab.video_list._list.setCurrentRow(0)
+    assert tab.compression.settings().cq == base + 7
+
+
 def test_compress_tab_defaults_output_next_to_input(
     qtbot, qapp, test_video: Path, tmp_path: Path
 ) -> None:

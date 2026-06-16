@@ -3,7 +3,11 @@
 The list area is itself a drop zone: drop video files on it or click the empty
 prompt to browse. Floating buttons (Add / Remove / optional Duplicate) hover over
 the list. Each row is a two-column entry — thumbnail | name + resolution · fps ·
-duration · frames — rendered by :class:`_VideoItemDelegate`.
+duration · frames (+ an optional per-item compression summary) — rendered by
+:class:`_VideoItemDelegate`.
+
+Each row can carry an arbitrary per-item object (``item_data``) — Compress uses
+this to give every video its own compression settings.
 """
 
 from __future__ import annotations
@@ -36,6 +40,8 @@ _PATH_ROLE = Qt.ItemDataRole.UserRole
 _PIX_ROLE = Qt.ItemDataRole.UserRole + 1
 _NAME_ROLE = Qt.ItemDataRole.UserRole + 2
 _DETAIL_ROLE = Qt.ItemDataRole.UserRole + 3
+_DATA_ROLE = Qt.ItemDataRole.UserRole + 4
+_SUMMARY_ROLE = Qt.ItemDataRole.UserRole + 5
 
 _THUMB = QSize(160, 90)
 _PAD = 6
@@ -49,7 +55,7 @@ def _describe(info: VideoInfo) -> str:
 
 
 class _VideoItemDelegate(QStyledItemDelegate):
-    """Paints a row as: thumbnail column | name (bold) + detail (muted)."""
+    """Paints a row as: thumbnail column | name (bold) + detail + summary."""
 
     def sizeHint(self, option, index) -> QSize:
         return QSize(_THUMB.width() + 280, _THUMB.height() + 2 * _PAD)
@@ -77,13 +83,14 @@ class _VideoItemDelegate(QStyledItemDelegate):
 
         name = index.data(_NAME_ROLE) or ""
         detail = index.data(_DETAIL_ROLE) or ""
+        summary = index.data(_SUMMARY_ROLE) or ""
 
         if selected:
             name_color = option.palette.highlightedText().color()
-            detail_color = name_color
+            muted = name_color
         else:
             name_color = option.palette.text().color()
-            detail_color = QColor("#888")
+            muted = QColor("#888")
 
         font = painter.font()
         font.setBold(True)
@@ -98,13 +105,21 @@ class _VideoItemDelegate(QStyledItemDelegate):
 
         font.setBold(False)
         painter.setFont(font)
-        painter.setPen(detail_color)
+        painter.setPen(muted)
         detail_rect = QRect(text_rect.left(), name_rect.bottom() + 2, text_rect.width(), 20)
         painter.drawText(
             detail_rect,
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
             detail or "—",
         )
+
+        if summary:
+            summary_rect = QRect(text_rect.left(), detail_rect.bottom() + 2, text_rect.width(), 18)
+            painter.drawText(
+                summary_rect,
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                summary,
+            )
 
         painter.restore()
 
@@ -178,6 +193,8 @@ class VideoList(QWidget):
     """A drag-reorderable list of video paths with thumbnails and details."""
 
     changed = Signal()
+    selection_changed = Signal()
+    items_added = Signal(list)  # list[int] of new row indices
 
     def __init__(self, with_duplicate: bool = False, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -238,15 +255,34 @@ class VideoList(QWidget):
     def count(self) -> int:
         return self._list.count()
 
+    def current_row(self) -> int:
+        return self._list.currentRow()
+
+    def selected_rows(self) -> list[int]:
+        return sorted(self._list.row(i) for i in self._list.selectedItems())
+
+    def item_data(self, row: int):
+        item = self._list.item(row)
+        return item.data(_DATA_ROLE) if item is not None else None
+
+    def set_item_data(self, row: int, value, summary: str = "") -> None:
+        item = self._list.item(row)
+        if item is not None:
+            item.setData(_DATA_ROLE, value)
+            item.setData(_SUMMARY_ROLE, summary)
+            # Repaint the row to show the updated summary.
+            self._list.update(self._list.indexFromItem(item))
+
     def add_paths(self, paths: list[Path]) -> None:
-        added = False
+        new_rows: list[int] = []
         for path in paths:
             if not is_accepted_video(path):
                 continue
             self._list.addItem(self._make_item(path, self._detail(path), self._thumbnail(path)))
-            added = True
-        if added:
+            new_rows.append(self._list.count() - 1)
+        if new_rows:
             self._update_empty()
+            self.items_added.emit(new_rows)
             self.changed.emit()
 
     def clear(self) -> None:
@@ -266,13 +302,14 @@ class VideoList(QWidget):
     def duplicate_selected(self) -> None:
         """Insert a copy of each selected row right after it."""
         rows = sorted(self._list.row(i) for i in self._list.selectedItems())
-        # Walk from the bottom so earlier insertions don't shift later indices.
         inserted = False
         for row in reversed(rows):
             src = self._list.item(row)
             clone = self._make_item(
                 src.data(_PATH_ROLE), src.data(_DETAIL_ROLE), src.data(_PIX_ROLE)
             )
+            clone.setData(_DATA_ROLE, src.data(_DATA_ROLE))
+            clone.setData(_SUMMARY_ROLE, src.data(_SUMMARY_ROLE))
             self._list.insertItem(row + 1, clone)
             inserted = True
         if inserted:
@@ -313,6 +350,7 @@ class VideoList(QWidget):
         self.remove_btn.setEnabled(has_sel)
         if self.duplicate_btn is not None:
             self.duplicate_btn.setEnabled(has_sel)
+        self.selection_changed.emit()
 
     def _update_empty(self) -> None:
         self._prompt.setVisible(self._list.count() == 0)
