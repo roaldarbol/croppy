@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from PySide6.QtCore import Qt
+
 from croppy.ffmpeg.frame import extract_frame
 from croppy.ffmpeg.probe import probe
 from croppy.gui.canvas import VideoCanvas
@@ -50,3 +52,45 @@ def test_editor_set_image_swaps_pixmap(qtbot, qapp, test_video: Path) -> None:
     qtbot.addWidget(editor)
     editor.set_image(image2)
     assert editor.canvas.image_size() == (320, 240)
+
+
+def test_editor_starts_empty(qtbot, qapp) -> None:
+    editor = EditorWidget()
+    qtbot.addWidget(editor)
+    assert editor.info() is None
+    assert not editor.canvas.has_image()
+    assert not editor.process_btn.isEnabled()
+    assert not editor.frame_spin.isEnabled()
+    assert editor.crop_regions() == []
+
+
+def test_editor_load_enables_controls(qtbot, qapp, test_video: Path) -> None:
+    editor = EditorWidget()
+    qtbot.addWidget(editor)
+    info = probe(test_video)
+    image = extract_frame(test_video, 1)
+    editor.load(info, image)
+    assert editor.info() == info
+    assert editor.canvas.has_image()
+    assert editor.frame_spin.isEnabled()
+    assert editor.reload_btn.isEnabled()
+
+
+def test_canvas_drop_emits_video_dropped(qtbot, qapp, test_video: Path) -> None:
+    from PySide6.QtCore import QMimeData, QUrl
+    from PySide6.QtGui import QDropEvent
+
+    canvas = VideoCanvas()
+    qtbot.addWidget(canvas)
+    mime = QMimeData()
+    mime.setUrls([QUrl.fromLocalFile(str(test_video))])
+    event = QDropEvent(
+        canvas.rect().center(),
+        Qt.DropAction.CopyAction,
+        mime,
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+    )
+    with qtbot.waitSignal(canvas.video_dropped, timeout=500) as blocker:
+        canvas.dropEvent(event)
+    assert blocker.args == [test_video]

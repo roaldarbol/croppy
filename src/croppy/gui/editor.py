@@ -1,4 +1,9 @@
-"""Editor view: canvas on the left, sidebar (frame picker / crops / process) on the right."""
+"""Editor view: canvas on the left, sidebar (frame picker / crops / process) on the right.
+
+The editor can be constructed empty — the canvas then shows a drop prompt and the
+sidebar is visible but its video-dependent controls stay disabled until
+:meth:`load` is called with a probed video.
+"""
 
 from __future__ import annotations
 
@@ -37,34 +42,65 @@ class EditorWidget(QWidget):
 
     def __init__(
         self,
-        info: VideoInfo,
-        image: QImage,
+        info: VideoInfo | None = None,
+        image: QImage | None = None,
         controller: CompressionController | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self._info = info
+        self._info: VideoInfo | None = None
         # A standalone controller is created when none is supplied (e.g. in tests).
         self._controller = controller or CompressionController(self)
         self._syncing_selection = False
         self._build_ui()
-        self.canvas.set_image(image)
 
         self.canvas.crops_changed.connect(self._refresh_crops)
         self.canvas.selection_changed.connect(self._on_canvas_selection)
+        self.canvas.video_dropped.connect(self.video_change_requested)
+        self.canvas.browse_requested.connect(self._browse_input_video)
         self.crops_list.itemSelectionChanged.connect(self._on_list_selection)
-        self._refresh_crops()
+
+        if info is not None and image is not None:
+            self.load(info, image)
+        else:
+            self._refresh_crops()
 
     # --- public API ---------------------------------------------------------
+
+    def load(self, info: VideoInfo, image: QImage) -> None:
+        """Populate the editor with a probed video and its preview frame."""
+        self._info = info
+        self.canvas.set_image(image)
+
+        nframes = f" · {info.nb_frames} frames" if info.nb_frames is not None else ""
+        self.summary.setText(
+            f"<b>{info.path.name}</b><br>"
+            f"{info.width}×{info.height} · "
+            f"{info.fps:.2f} fps · "
+            f"{info.duration_seconds:.2f}s{nframes}"
+        )
+        self.input_path_edit.setText(str(info.path))
+        self.input_path_edit.setToolTip(str(info.path))
+        self.input_path_edit.setCursorPosition(0)
+        if not self.output_picker.has_dir():
+            self.output_picker.set_output_dir(info.path.parent)
+
+        self.frame_spin.setMaximum(info.nb_frames or 1_000_000_000)
+        self.frame_spin.setValue(1)
+        self.frame_spin.setEnabled(True)
+        self.reload_btn.setEnabled(True)
+        self._refresh_crops()
 
     def set_image(self, image: QImage) -> None:
         self.canvas.set_image(image)
 
-    def info(self) -> VideoInfo:
+    def info(self) -> VideoInfo | None:
         return self._info
 
     def crop_regions(self) -> list[CropRegion]:
         """Snapped crop regions (even-aligned, clamped to the source frame)."""
+        if self._info is None:
+            return []
         info = self._info
         return [
             item.crop_region().clamped(info.width, info.height).snapped
@@ -103,24 +139,18 @@ class EditorWidget(QWidget):
         v.setContentsMargins(8, 8, 8, 8)
         v.setSpacing(12)
 
-        nframes = f" · {self._info.nb_frames} frames" if self._info.nb_frames is not None else ""
-        summary = QLabel(
-            f"<b>{self._info.path.name}</b><br>"
-            f"{self._info.width}×{self._info.height} · "
-            f"{self._info.fps:.2f} fps · "
-            f"{self._info.duration_seconds:.2f}s{nframes}"
-        )
-        summary.setWordWrap(True)
-        summary.setTextFormat(Qt.TextFormat.RichText)
-        v.addWidget(summary)
+        self.summary = QLabel("No video loaded — drop one on the canvas or click to browse.")
+        self.summary.setWordWrap(True)
+        self.summary.setTextFormat(Qt.TextFormat.RichText)
+        self.summary.setStyleSheet("color: #888;")
+        v.addWidget(self.summary)
 
         input_group = QGroupBox("Input video")
         ig = QHBoxLayout(input_group)
         ig.setContentsMargins(8, 8, 8, 8)
         ig.setSpacing(6)
-        self.input_path_edit = QLineEdit(str(self._info.path))
+        self.input_path_edit = QLineEdit("")
         self.input_path_edit.setReadOnly(True)
-        self.input_path_edit.setToolTip(str(self._info.path))
         self.input_path_edit.setCursorPosition(0)
         self.browse_input_btn = QPushButton("Browse…")
         self.browse_input_btn.clicked.connect(self._browse_input_video)
@@ -128,16 +158,18 @@ class EditorWidget(QWidget):
         ig.addWidget(self.browse_input_btn, 0)
         v.addWidget(input_group)
 
-        self.output_picker = OutputFolderPicker(initial_dir=self._info.path.parent)
+        self.output_picker = OutputFolderPicker()
         v.addWidget(self.output_picker)
 
         frame_group = QGroupBox("Preview frame")
         fl = QHBoxLayout(frame_group)
         self.frame_spin = QSpinBox()
         self.frame_spin.setMinimum(1)
-        self.frame_spin.setMaximum(self._info.nb_frames or 1_000_000_000)
+        self.frame_spin.setMaximum(1_000_000_000)
         self.frame_spin.setValue(1)
+        self.frame_spin.setEnabled(False)
         self.reload_btn = QPushButton("Reload")
+        self.reload_btn.setEnabled(False)
         self.reload_btn.clicked.connect(self._emit_frame_change)
         fl.addWidget(self.frame_spin, 1)
         fl.addWidget(self.reload_btn, 0)
@@ -215,10 +247,11 @@ class EditorWidget(QWidget):
             self._syncing_selection = False
 
     def _browse_input_video(self) -> None:
+        start_dir = str(self._info.path.parent) if self._info is not None else ""
         path_str, _ = QFileDialog.getOpenFileName(
             self,
             "Choose input video",
-            str(self._info.path.parent),
+            start_dir,
             file_dialog_filter(),
         )
         if path_str:

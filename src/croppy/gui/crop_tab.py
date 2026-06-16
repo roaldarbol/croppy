@@ -1,4 +1,8 @@
-"""Crop tab: the original landing → editor workflow, now one tab among several."""
+"""Crop tab: draw crop ROIs on a video and queue one crop job per region.
+
+The editor is shown immediately (empty), so the drop/browse target is the canvas
+in the centre and the sidebar on the right is always visible.
+"""
 
 from __future__ import annotations
 
@@ -13,7 +17,6 @@ from croppy.ffmpeg.frame import FrameExtractError, extract_frame
 from croppy.ffmpeg.probe import ProbeError, probe
 from croppy.gui.compression_panel import CompressionController
 from croppy.gui.editor import EditorWidget
-from croppy.gui.landing import LandingWidget
 from croppy.jobs.job import CropJob
 from croppy.jobs.queue import JobQueue
 
@@ -30,16 +33,16 @@ class CropTab(QWidget):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self._controller = controller
         self._queue = queue
         self._video_path: Path | None = None
-        self._editor: EditorWidget | None = None
 
-        self._layout = QVBoxLayout(self)
-        self._layout.setContentsMargins(0, 0, 0, 0)
-        self._current: QWidget = LandingWidget(self)
-        self._current.video_selected.connect(self.open_video)
-        self._layout.addWidget(self._current)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self._editor = EditorWidget(controller=controller)
+        self._editor.frame_change_requested.connect(self._reload_frame)
+        self._editor.video_change_requested.connect(self.open_video)
+        self._editor.process_requested.connect(self._start_processing)
+        layout.addWidget(self._editor)
 
     # --- public API ---------------------------------------------------------
 
@@ -50,29 +53,19 @@ class CropTab(QWidget):
             image = extract_frame(path, frame_number=1)
         except (ProbeError, FrameExtractError) as exc:
             logger.error("Could not open {}: {}", path, exc)
-            QMessageBox.critical(self, "croppy", f"Could not open <b>{path.name}</b>:<br><br>{exc}")
+            QMessageBox.critical(
+                self, "croppy", f"Could not open <b>{path.name}</b>:<br><br>{exc}"
+            )
             return
 
         self._video_path = path
-        editor = EditorWidget(info, image, controller=self._controller, parent=self)
-        editor.frame_change_requested.connect(self._reload_frame)
-        editor.video_change_requested.connect(self.open_video)
-        editor.process_requested.connect(self._start_processing)
-        self._editor = editor
-        self._set_central(editor)
+        self._editor.load(info, image)
         self.title_changed.emit(path.name)
 
     # --- internals ----------------------------------------------------------
 
-    def _set_central(self, widget: QWidget) -> None:
-        self._layout.removeWidget(self._current)
-        self._current.setParent(None)
-        self._current.deleteLater()
-        self._layout.addWidget(widget)
-        self._current = widget
-
     def _reload_frame(self, frame_number: int) -> None:
-        if self._video_path is None or self._editor is None:
+        if self._video_path is None:
             return
         try:
             image = extract_frame(self._video_path, frame_number=frame_number)
@@ -85,7 +78,7 @@ class CropTab(QWidget):
         self._editor.set_image(image)
 
     def _start_processing(self) -> None:
-        if self._video_path is None or self._editor is None:
+        if self._video_path is None:
             return
         regions = self._editor.crop_regions()
         if not regions:
