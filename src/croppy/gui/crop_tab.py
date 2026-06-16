@@ -53,9 +53,7 @@ class CropTab(QWidget):
             image = extract_frame(path, frame_number=1)
         except (ProbeError, FrameExtractError) as exc:
             logger.error("Could not open {}: {}", path, exc)
-            QMessageBox.critical(
-                self, "croppy", f"Could not open <b>{path.name}</b>:<br><br>{exc}"
-            )
+            QMessageBox.critical(self, "croppy", f"Could not open <b>{path.name}</b>:<br><br>{exc}")
             return
 
         self._video_path = path

@@ -264,11 +264,7 @@ class JobsPanel(QWidget):
         return [row for row in self._rows.values() if row.is_checked()]
 
     def _start_selected(self) -> None:
-        ids = [
-            row.job().id
-            for row in self._checked_rows()
-            if row.job().state == JobState.QUEUED
-        ]
+        ids = [row.job().id for row in self._checked_rows() if row.job().state == JobState.QUEUED]
         if ids:
             self._queue.start(ids)
 
@@ -283,10 +279,6 @@ class JobsPanel(QWidget):
         has_staged = any(j.state == JobState.QUEUED for j in jobs)
         checked = self._checked_rows()
         self._start_all_btn.setEnabled(has_staged)
-        self._start_sel_btn.setEnabled(
-            any(r.job().state == JobState.QUEUED for r in checked)
-        )
-        self._remove_btn.setEnabled(
-            any(r.job().state != JobState.RUNNING for r in checked)
-        )
+        self._start_sel_btn.setEnabled(any(r.job().state == JobState.QUEUED for r in checked))
+        self._remove_btn.setEnabled(any(r.job().state != JobState.RUNNING for r in checked))
         self._clear_btn.setEnabled(any(j.state in _FINISHED_STATES for j in jobs))

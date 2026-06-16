@@ -1,7 +1,9 @@
-"""Reorderable list of videos with thumbnails, shared by Combine and Compress.
+"""Reorderable list of videos, shared by Combine and Compress.
 
 "Add videos…" multi-selects files; rows can be drag-reordered (Combine cares
-about order) and removed. Each row shows a first-frame thumbnail.
+about order) and removed. Each row is a two-column entry: a thumbnail on the
+left and a description (name + resolution · fps · duration · frames) on the
+right, rendered by :class:`_VideoItemDelegate`.
 """
 
 from __future__ import annotations
@@ -9,8 +11,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from loguru import logger
-from PySide6.QtCore import QSize, Qt, Signal
-from PySide6.QtGui import QIcon, QPixmap
+from PySide6.QtCore import QRect, QSize, Qt, Signal
+from PySide6.QtGui import QColor, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
@@ -18,19 +20,97 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QStyle,
+    QStyledItemDelegate,
     QVBoxLayout,
     QWidget,
 )
 
 from croppy.ffmpeg.frame import FrameExtractError, extract_frame
+from croppy.ffmpeg.probe import ProbeError, VideoInfo, probe
 from croppy.gui.landing import file_dialog_filter, is_accepted_video
 
 _PATH_ROLE = Qt.ItemDataRole.UserRole
-_THUMB = QSize(128, 72)
+_PIX_ROLE = Qt.ItemDataRole.UserRole + 1
+_NAME_ROLE = Qt.ItemDataRole.UserRole + 2
+_DETAIL_ROLE = Qt.ItemDataRole.UserRole + 3
+
+_THUMB = QSize(160, 90)
+_PAD = 6
+
+
+def _describe(info: VideoInfo) -> str:
+    nframes = f" · {info.nb_frames} frames" if info.nb_frames is not None else ""
+    return (
+        f"{info.width}×{info.height} · {info.fps:.0f} fps · {info.duration_seconds:.1f}s{nframes}"
+    )
+
+
+class _VideoItemDelegate(QStyledItemDelegate):
+    """Paints a row as: thumbnail column | name (bold) + detail (muted)."""
+
+    def sizeHint(self, option, index) -> QSize:
+        return QSize(_THUMB.width() + 280, _THUMB.height() + 2 * _PAD)
+
+    def paint(self, painter, option, index) -> None:
+        painter.save()
+
+        selected = bool(option.state & QStyle.StateFlag.State_Selected)
+        if selected:
+            painter.fillRect(option.rect, option.palette.highlight())
+
+        rect = option.rect
+        # Thumbnail column.
+        thumb_box = QRect(rect.left() + _PAD, rect.top() + _PAD, _THUMB.width(), _THUMB.height())
+        painter.fillRect(thumb_box, QColor("#1e1e1e"))
+        pix = index.data(_PIX_ROLE)
+        if isinstance(pix, QPixmap) and not pix.isNull():
+            x = thumb_box.left() + (thumb_box.width() - pix.width()) // 2
+            y = thumb_box.top() + (thumb_box.height() - pix.height()) // 2
+            painter.drawPixmap(x, y, pix)
+
+        # Text column.
+        text_left = thumb_box.right() + 2 * _PAD
+        text_rect = QRect(
+            text_left, rect.top() + _PAD, rect.right() - text_left - _PAD, rect.height() - 2 * _PAD
+        )
+
+        name = index.data(_NAME_ROLE) or ""
+        detail = index.data(_DETAIL_ROLE) or ""
+
+        if selected:
+            name_color = option.palette.highlightedText().color()
+            detail_color = name_color
+        else:
+            name_color = option.palette.text().color()
+            detail_color = QColor("#888")
+
+        font = painter.font()
+        font.setBold(True)
+        painter.setFont(font)
+        painter.setPen(name_color)
+        name_rect = QRect(text_rect.left(), text_rect.top(), text_rect.width(), 22)
+        painter.drawText(
+            name_rect,
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            painter.fontMetrics().elidedText(name, Qt.TextElideMode.ElideMiddle, name_rect.width()),
+        )
+
+        font.setBold(False)
+        painter.setFont(font)
+        painter.setPen(detail_color)
+        detail_rect = QRect(text_rect.left(), name_rect.bottom() + 2, text_rect.width(), 20)
+        painter.drawText(
+            detail_rect,
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            detail or "—",
+        )
+
+        painter.restore()
 
 
 class VideoList(QWidget):
-    """A drag-reorderable list of video paths with first-frame thumbnails."""
+    """A drag-reorderable list of video paths with thumbnails and details."""
 
     changed = Signal()
 
@@ -56,8 +136,9 @@ class VideoList(QWidget):
         self._list = QListWidget()
         self._list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self._list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
-        self._list.setIconSize(_THUMB)
+        self._list.setItemDelegate(_VideoItemDelegate(self._list))
         self._list.setUniformItemSizes(True)
+        self._list.setSpacing(1)
         self._list.itemSelectionChanged.connect(self._on_selection_changed)
         # Reordering via drag-and-drop moves rows in the model.
         self._list.model().rowsMoved.connect(self.changed)
@@ -77,10 +158,12 @@ class VideoList(QWidget):
         for path in paths:
             if not is_accepted_video(path):
                 continue
-            item = QListWidgetItem(path.name)
+            item = QListWidgetItem()
             item.setData(_PATH_ROLE, path)
+            item.setData(_NAME_ROLE, path.name)
+            item.setData(_DETAIL_ROLE, self._detail(path))
+            item.setData(_PIX_ROLE, self._thumbnail(path))
             item.setToolTip(str(path))
-            item.setIcon(self._thumbnail(path))
             self._list.addItem(item)
             added = True
         if added:
@@ -120,15 +203,21 @@ class VideoList(QWidget):
     def _on_selection_changed(self) -> None:
         self.remove_btn.setEnabled(bool(self._list.selectedItems()))
 
-    def _thumbnail(self, path: Path) -> QIcon:
+    def _detail(self, path: Path) -> str:
+        try:
+            return _describe(probe(path))
+        except ProbeError as exc:
+            logger.warning("Probe failed for {}: {}", path, exc)
+            return ""
+
+    def _thumbnail(self, path: Path) -> QPixmap:
         try:
             image = extract_frame(path, frame_number=1)
         except FrameExtractError as exc:
             logger.warning("Thumbnail failed for {}: {}", path, exc)
-            return QIcon()
-        pix = QPixmap.fromImage(image).scaled(
+            return QPixmap()
+        return QPixmap.fromImage(image).scaled(
             _THUMB,
             Qt.AspectRatioMode.KeepAspectRatio,
             Qt.TransformationMode.SmoothTransformation,
         )
-        return QIcon(pix)

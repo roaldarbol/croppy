@@ -5,7 +5,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from croppy.gui.video_list import VideoList
+from croppy.gui.video_list import _DETAIL_ROLE, _NAME_ROLE, _PIX_ROLE, VideoList
 
 
 def _two_videos(test_video: Path, tmp_path: Path) -> list[Path]:
@@ -24,6 +24,24 @@ def test_add_paths_populates_list(qtbot, qapp, test_video: Path, tmp_path: Path)
         vl.add_paths(paths)
     assert vl.paths() == paths
     assert vl.count() == 2
+
+
+def test_rows_carry_name_detail_and_thumbnail(
+    qtbot, qapp, test_video: Path, tmp_path: Path
+) -> None:
+    from PySide6.QtGui import QPixmap
+
+    vl = VideoList()
+    qtbot.addWidget(vl)
+    a = tmp_path / "clip.mp4"
+    shutil.copy(test_video, a)
+    vl.add_paths([a])
+    item = vl._list.item(0)
+    assert item.data(_NAME_ROLE) == "clip.mp4"
+    detail = item.data(_DETAIL_ROLE)
+    assert "320×240" in detail and "fps" in detail
+    assert isinstance(item.data(_PIX_ROLE), QPixmap)
+    assert not item.data(_PIX_ROLE).isNull()
 
 
 def test_non_video_ignored(qtbot, qapp, tmp_path: Path) -> None:
