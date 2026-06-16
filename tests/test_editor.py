@@ -76,9 +76,7 @@ def test_editor_load_enables_controls(qtbot, qapp, test_video: Path) -> None:
     assert editor.reload_btn.isEnabled()
 
 
-def test_load_new_video_clears_crops_and_resets_compression(
-    qtbot, qapp, test_video: Path
-) -> None:
+def test_load_new_video_clears_crops_and_resets_compression(qtbot, qapp, test_video: Path) -> None:
     from PySide6.QtCore import QRectF
 
     from croppy.models import EncodeSettings

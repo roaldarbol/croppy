@@ -25,8 +25,9 @@ def _copies(test_video: Path, tmp_path: Path, n: int) -> list[Path]:
     return out
 
 
-def test_combine_tab_queues_single_job(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
+def test_combine_group_queues_one_job(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
     queue = MagicMock()
+    queue.jobs.return_value = []
     tab = CombineTab(CompressionController(), queue)
     qtbot.addWidget(tab)
 
@@ -38,35 +39,61 @@ def test_combine_tab_queues_single_job(qtbot, qapp, test_video: Path, tmp_path: 
     tab.output_picker.set_filename("joined.mp4")
 
     assert tab.queue_btn.isEnabled()
-    tab._queue_job()
+    tab._queue_all()
 
     queue.submit.assert_called_once()
     job = queue.submit.call_args[0][0]
     assert isinstance(job, CombineJob)
     assert job.inputs == paths
     assert job.output_path == out_dir / "joined.mp4"
-    # List is cleared so the next job can be built.
-    assert tab.video_list.count() == 0
+    # Groups are kept (not cleared) so they can be re-queued.
+    assert tab.video_list.count() == 3
 
 
-def test_combine_tab_forces_mp4_extension(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
+def test_combine_forces_mp4_extension(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
     queue = MagicMock()
+    queue.jobs.return_value = []
     tab = CombineTab(CompressionController(), queue)
     qtbot.addWidget(tab)
     tab.video_list.add_paths(_copies(test_video, tmp_path, 2))
     tab.output_picker.set_output_dir(tmp_path)
     tab.output_picker.set_filename("myclip")  # no extension
-    tab._queue_job()
+    tab._queue_all()
     job = queue.submit.call_args[0][0]
     assert job.output_path.name == "myclip.mp4"
 
 
-def test_combine_tab_needs_two_videos(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
+def test_combine_needs_two_videos(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
     queue = MagicMock()
     tab = CombineTab(CompressionController(), queue)
     qtbot.addWidget(tab)
     tab.video_list.add_paths(_copies(test_video, tmp_path, 1))
     assert not tab.queue_btn.isEnabled()
+
+
+def test_combine_multiple_groups(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
+    queue = MagicMock()
+    queue.jobs.return_value = []
+    tab = CombineTab(CompressionController(), queue)
+    qtbot.addWidget(tab)
+
+    # Group 1
+    tab.video_list.add_paths(_copies(test_video, tmp_path, 2))
+    tab.output_picker.set_filename("first.mp4")
+    # Group 2
+    tab._add_group(select=True)
+    g2 = tmp_path / "g2"
+    g2.mkdir()
+    (g2 / "x.mp4").write_bytes((tmp_path / "clip0.mp4").read_bytes())
+    (g2 / "y.mp4").write_bytes((tmp_path / "clip0.mp4").read_bytes())
+    tab.video_list.add_paths([g2 / "x.mp4", g2 / "y.mp4"])
+    tab.output_picker.set_filename("second.mp4")
+
+    assert len(tab._groups) == 2
+    tab._queue_all()
+    assert queue.submit.call_count == 2
+    names = {c.args[0].output_path.name for c in queue.submit.call_args_list}
+    assert names == {"first.mp4", "second.mp4"}
 
 
 def test_compress_tab_queues_one_job_per_video(
