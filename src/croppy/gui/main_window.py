@@ -22,7 +22,7 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("croppy")
-        self.resize(1100, 760)
+        self.resize(1340, 820)
 
         # Shared across every tab.
         self._controller = CompressionController(self)

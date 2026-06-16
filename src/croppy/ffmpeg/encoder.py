@@ -19,21 +19,48 @@ _FASTSTART_CONTAINERS = frozenset({"mp4", "mov"})
 
 @lru_cache(maxsize=1)
 def nvenc_available() -> bool:
-    """True if this ffmpeg build exposes the ``hevc_nvenc`` encoder.
+    """True if this ffmpeg build can *actually* encode with ``hevc_nvenc``.
 
-    Result is cached for the process: probing ``ffmpeg -encoders`` is slow and
-    the answer cannot change while the app is running.
+    A build may list ``hevc_nvenc`` without a usable GPU (common on CI and on
+    machines with the encoder compiled in but no/incompatible NVIDIA driver), so
+    we don't just grep ``-encoders``: we run a tiny throwaway encode and check it
+    succeeds. Fail-closed (any error / timeout → not available → CPU fallback).
+    Cached for the process; the answer can't change while the app runs.
     """
+    ffmpeg = str(find_ffmpeg())
     try:
-        proc = subprocess.run(
-            [str(find_ffmpeg()), "-hide_banner", "-encoders"],
+        listing = subprocess.run(
+            [ffmpeg, "-hide_banner", "-encoders"],
             capture_output=True,
             text=True,
             check=False,
         )
     except OSError:
         return False
-    return "hevc_nvenc" in (proc.stdout + proc.stderr)
+    if "hevc_nvenc" not in (listing.stdout + listing.stderr):
+        return False
+
+    # Encoder is present — confirm a real encode works on this machine.
+    try:
+        probe = subprocess.run(
+            [
+                ffmpeg,
+                "-hide_banner",
+                "-loglevel", "error",
+                "-f", "lavfi",
+                "-i", "nullsrc=s=256x256:d=0.1",
+                "-c:v", "hevc_nvenc",
+                "-f", "null",
+                "-",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return probe.returncode == 0
 
 
 def resolve_encoder(settings: EncodeSettings) -> str:

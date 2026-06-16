@@ -18,7 +18,9 @@ def _make_job(input_path: Path, output_path: Path, duration: float = 2.0) -> Cro
         input_path=input_path,
         output_path=output_path,
         region=CropRegion(0, 0, 160, 120),
-        settings=EncodeSettings(preset="ultrafast", audio_mode="copy"),
+        # Pin a CPU encoder so these real-ffmpeg runs don't depend on a working
+        # GPU. CI builds can expose hevc_nvenc without a usable NVENC device.
+        settings=EncodeSettings(encoder="libx264", preset="ultrafast", audio_mode="copy"),
         duration_seconds=duration,
     )
 

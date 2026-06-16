@@ -3,11 +3,44 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import croppy.ffmpeg.encoder as enc
 from croppy.ffmpeg.crop import build_crop_command
 from croppy.ffmpeg.encoder import encoder_args, resolve_encoder
 from croppy.models import CropRegion, EncodeSettings
+
+
+def _fake_run(*, listed: bool, encode_ok: bool):
+    def run(cmd, **_kwargs):
+        if "-encoders" in cmd:
+            text = "V..... hevc_nvenc" if listed else "V..... libx264"
+            return SimpleNamespace(stdout=text, stderr="", returncode=0)
+        # The throwaway encode probe.
+        return SimpleNamespace(stdout="", stderr="", returncode=0 if encode_ok else 1)
+
+    return run
+
+
+def test_nvenc_available_requires_a_working_encode(monkeypatch) -> None:
+    monkeypatch.setattr(enc, "find_ffmpeg", lambda: "ffmpeg")
+
+    # Listed and a test encode succeeds → available.
+    enc.nvenc_available.cache_clear()
+    monkeypatch.setattr(enc.subprocess, "run", _fake_run(listed=True, encode_ok=True))
+    assert enc.nvenc_available() is True
+
+    # Listed but the test encode fails (no usable GPU) → not available.
+    enc.nvenc_available.cache_clear()
+    monkeypatch.setattr(enc.subprocess, "run", _fake_run(listed=True, encode_ok=False))
+    assert enc.nvenc_available() is False
+
+    # Not even listed → not available (no probe needed).
+    enc.nvenc_available.cache_clear()
+    monkeypatch.setattr(enc.subprocess, "run", _fake_run(listed=False, encode_ok=True))
+    assert enc.nvenc_available() is False
+
+    enc.nvenc_available.cache_clear()  # don't leak a fake result to other tests
 
 
 def test_resolve_encoder_auto_prefers_nvenc(monkeypatch) -> None:
