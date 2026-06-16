@@ -33,13 +33,19 @@ def test_edited_panel_detaches_from_default(qtbot, qapp) -> None:
     assert panel.settings().cq == 40
 
 
-def test_settings_tab_updates_and_persists_default(qtbot, qapp) -> None:
+def test_settings_tab_saves_default_on_button(qtbot, qapp) -> None:
     controller = CompressionController()
     tab = SettingsTab(controller)
     qtbot.addWidget(tab)
-    tab.compression.settings_panel.cq_spin.setValue(35)
+    # Editing enables Save but does not apply yet.
+    tab.settings_panel.cq_spin.setValue(35)
+    assert tab.save_btn.isEnabled()
+    assert controller.default().cq != 35
+    # Saving applies + persists.
+    tab.save_btn.click()
     assert controller.default().cq == 35
     assert load_encode_settings().cq == 35  # persisted via QSettings
+    assert not tab.save_btn.isEnabled()
 
 
 def test_two_panels_are_independent(qtbot, qapp) -> None:

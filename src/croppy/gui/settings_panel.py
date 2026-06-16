@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFormLayout,
+    QSizePolicy,
     QSpinBox,
     QToolButton,
     QVBoxLayout,
@@ -204,6 +205,23 @@ class SettingsPanel(QWidget):
             "Adds -movflags +faststart. Improves streamability for web playback."
         )
         form.addRow("Faststart:", self.faststart_check)
+
+        # Give every input the same width so the column lines up tidily.
+        for field in (
+            self.container_combo,
+            self.encoder_combo,
+            self.cq_spin,
+            self.nvenc_preset_combo,
+            self.crf_spin,
+            self.preset_combo,
+            self.tune_combo,
+            self.pixfmt_combo,
+            self.audio_combo,
+            self.audio_bitrate_combo,
+        ):
+            field.setMinimumWidth(150)
+            field.setMaximumWidth(240)
+            field.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         self.set_settings(initial)
         self._update_dependent_enabled()

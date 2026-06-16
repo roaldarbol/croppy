@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QStyle,
     QStyledItemDelegate,
+    QVBoxLayout,
     QWidget,
 )
 
@@ -110,7 +111,12 @@ class _VideoItemDelegate(QStyledItemDelegate):
 
 class _DropListWidget(QListWidget):
     """QListWidget that keeps internal-move reorder but also accepts file drops
-    and reports clicks on the empty area."""
+    and reports clicks on the empty area.
+
+    Hosts two overlay widgets positioned over its viewport: ``center_widget``
+    (the empty-state prompt, centered) and ``bottom_widget`` (the floating
+    action buttons, bottom-centered).
+    """
 
     files_dropped = Signal(list)  # list[Path]
     browse_requested = Signal()
@@ -118,6 +124,23 @@ class _DropListWidget(QListWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setAcceptDrops(True)
+        self.center_widget: QWidget | None = None
+        self.bottom_widget: QWidget | None = None
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._reposition_overlays()
+
+    def _reposition_overlays(self) -> None:
+        vp = self.viewport().rect()
+        if self.center_widget is not None:
+            self.center_widget.setGeometry(vp)
+        if self.bottom_widget is not None:
+            self.bottom_widget.adjustSize()
+            self.bottom_widget.move(
+                vp.center().x() - self.bottom_widget.width() // 2,
+                vp.bottom() - self.bottom_widget.height() - 12,
+            )
 
     def dragEnterEvent(self, event) -> None:
         if event.mimeData().hasUrls():
@@ -160,6 +183,8 @@ class VideoList(QWidget):
         super().__init__(parent)
         self._last_dir = ""
 
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
         self._list = _DropListWidget(self)
         self._list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self._list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
@@ -170,17 +195,19 @@ class VideoList(QWidget):
         self._list.model().rowsMoved.connect(self.changed)
         self._list.files_dropped.connect(self.add_paths)
         self._list.browse_requested.connect(self.open_dialog)
+        layout.addWidget(self._list)
 
-        # Centered prompt shown only when the list is empty.
+        # Centered prompt shown only when the list is empty (matches the Crop canvas).
         self._prompt = QLabel("Drop videos here\nor click to browse", self._list.viewport())
         self._prompt.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._prompt.setStyleSheet("color: #888; font-size: 16px;")
         self._prompt.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self._list.center_widget = self._prompt
 
-        # Floating action buttons hovering over the list.
-        self._overlay = QFrame(self)
+        # Floating action buttons hovering over the list, bottom-centered.
+        self._overlay = QFrame(self._list.viewport())
         self._overlay.setStyleSheet(
-            "QFrame { background: rgba(40, 40, 40, 200); border-radius: 8px; }"
+            "QFrame { background: rgba(40, 40, 40, 210); border-radius: 8px; }"
         )
         ob = QHBoxLayout(self._overlay)
         ob.setContentsMargins(8, 6, 8, 6)
@@ -198,6 +225,7 @@ class VideoList(QWidget):
             self.duplicate_btn.clicked.connect(self.duplicate_selected)
             self.duplicate_btn.setEnabled(False)
             ob.addWidget(self.duplicate_btn)
+        self._list.bottom_widget = self._overlay
 
         self._update_empty()
 
@@ -261,17 +289,6 @@ class VideoList(QWidget):
         self.add_paths(paths)
 
     # --- Qt overrides -------------------------------------------------------
-
-    def resizeEvent(self, event) -> None:
-        super().resizeEvent(event)
-        self._list.setGeometry(self.rect())
-        self._prompt.setGeometry(self._list.viewport().rect())
-        self._overlay.adjustSize()
-        rect = self.rect()
-        self._overlay.move(
-            rect.center().x() - self._overlay.width() // 2,
-            rect.bottom() - self._overlay.height() - 10,
-        )
 
     def keyPressEvent(self, event) -> None:
         if event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
