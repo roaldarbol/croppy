@@ -1,4 +1,4 @@
-"""Collapsible "Compression" settings form, shared by every tab.
+"""The "Encoding" settings form, shared by every tab.
 
 The form edits an :class:`EncodeSettings`. The encoder selector chooses between
 the GPU (NVENC HEVC) and CPU (libx265/libx264) pipelines; the quality controls
@@ -15,8 +15,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QSizePolicy,
     QSpinBox,
-    QToolButton,
-    QVBoxLayout,
     QWidget,
 )
 
@@ -66,47 +64,6 @@ AUDIO_BITRATES: tuple[str, ...] = ("96k", "128k", "192k", "256k", "320k")
 # Encoder values that use the NVENC / CPU quality controls respectively.
 _NVENC_ENCODERS = frozenset({"auto", "nvenc_hevc"})
 _CPU_ENCODERS = frozenset({"auto", "libx265", "libx264"})
-
-
-class CollapsibleSection(QWidget):
-    """A simple collapsible container: clickable header + togglable content."""
-
-    def __init__(self, title: str, expanded: bool = False, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self._toggle = QToolButton(self)
-        self._toggle.setText(title)
-        self._toggle.setCheckable(True)
-        self._toggle.setChecked(expanded)
-        self._toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self._toggle.setArrowType(Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow)
-        self._toggle.setStyleSheet(
-            "QToolButton { border: none; font-weight: bold; padding: 4px; text-align: left; }"
-        )
-        self._toggle.toggled.connect(self._on_toggled)
-
-        self._content = QWidget(self)
-        self._content.setVisible(expanded)
-        self._content_layout = QVBoxLayout(self._content)
-        self._content_layout.setContentsMargins(12, 4, 4, 4)
-
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.setSpacing(0)
-        outer.addWidget(self._toggle)
-        outer.addWidget(self._content)
-
-    def add_widget(self, widget: QWidget) -> None:
-        self._content_layout.addWidget(widget)
-
-    def is_expanded(self) -> bool:
-        return self._toggle.isChecked()
-
-    def set_expanded(self, value: bool) -> None:
-        self._toggle.setChecked(value)
-
-    def _on_toggled(self, expanded: bool) -> None:
-        self._content.setVisible(expanded)
-        self._toggle.setArrowType(Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow)
 
 
 def _tune_to_ui(tune: str) -> str:

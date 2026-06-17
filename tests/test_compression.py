@@ -48,6 +48,34 @@ def test_settings_tab_saves_default_on_button(qtbot, qapp) -> None:
     assert not tab.save_btn.isEnabled()
 
 
+def test_reset_button_enabled_only_when_changed(qtbot, qapp) -> None:
+    controller = CompressionController()
+    panel = CompressionPanel(initial=controller.default(), controller=controller)
+    qtbot.addWidget(panel)
+    assert not panel.reset_btn.isEnabled()  # matches the default
+    panel.settings_panel.cq_spin.setValue(controller.default().cq + 5)
+    assert panel.reset_btn.isEnabled()
+
+
+def test_reset_button_restores_default(qtbot, qapp) -> None:
+    controller = CompressionController()
+    panel = CompressionPanel(
+        initial=controller.default(), controller=controller, follow_default=False
+    )
+    qtbot.addWidget(panel)
+    emitted: list = []
+    panel.settings_changed.connect(emitted.append)
+
+    base_cq = controller.default().cq
+    panel.settings_panel.cq_spin.setValue(base_cq + 6)
+    panel.reset_btn.click()
+
+    assert panel.settings().cq == base_cq
+    assert not panel.reset_btn.isEnabled()
+    # The reset is emitted so per-item/per-group tabs persist it.
+    assert emitted and emitted[-1].cq == base_cq
+
+
 def test_two_panels_are_independent(qtbot, qapp) -> None:
     controller = CompressionController()
     a = CompressionPanel(initial=controller.default(), controller=controller)

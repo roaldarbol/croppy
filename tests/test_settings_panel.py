@@ -1,4 +1,4 @@
-"""Tests for SettingsPanel + CollapsibleSection."""
+"""Tests for SettingsPanel."""
 
 from __future__ import annotations
 
@@ -10,7 +10,6 @@ from croppy.gui.settings_panel import (
     PIXEL_FORMATS,
     PRESETS,
     TUNES_UI,
-    CollapsibleSection,
     SettingsPanel,
 )
 from croppy.models import EncodeSettings
@@ -146,11 +145,3 @@ def test_settings_panel_tune_round_trip(qtbot, qapp) -> None:
     assert panel.settings().tune == "film"
     panel.tune_combo.setCurrentText("none")
     assert panel.settings().tune == ""
-
-
-def test_collapsible_starts_collapsed(qtbot, qapp) -> None:
-    section = CollapsibleSection("hi")
-    qtbot.addWidget(section)
-    assert not section.is_expanded()
-    section.set_expanded(True)
-    assert section.is_expanded()

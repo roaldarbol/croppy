@@ -181,7 +181,7 @@ class EditorWidget(QWidget):
         v.addWidget(crops_group)
 
         self.compression = CompressionPanel(
-            initial=self._controller.default(), controller=self._controller, expanded=True
+            initial=self._controller.default(), controller=self._controller
         )
         v.addWidget(self.compression)
 

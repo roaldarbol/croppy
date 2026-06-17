@@ -1,4 +1,4 @@
-"""Settings tab: configure the *default* compression used to seed every tab."""
+"""Settings tab: configure the *default* encoding used to seed every tab."""
 
 from __future__ import annotations
 
@@ -27,13 +27,13 @@ class SettingsTab(QWidget):
         super().__init__(parent)
         self._controller = controller
 
-        # Two equal-width columns side by side: compression left, logging right.
+        # Two equal-width columns side by side: encoding left, logging right.
         # Ignored horizontal size policy + equal stretch makes the split exactly
         # 50/50 regardless of either column's natural content width.
         columns = QHBoxLayout(self)
         columns.setContentsMargins(20, 20, 20, 20)
         columns.setSpacing(40)
-        columns.addWidget(self._build_compression_column(), 1)
+        columns.addWidget(self._build_encoding_column(), 1)
         columns.addWidget(self._build_logging_section(), 1)
 
     @staticmethod
@@ -45,18 +45,18 @@ class SettingsTab(QWidget):
         layout.setSpacing(10)
         return widget, layout
 
-    # --- compression --------------------------------------------------------
+    # --- encoding -----------------------------------------------------------
 
-    def _build_compression_column(self) -> QWidget:
+    def _build_encoding_column(self) -> QWidget:
         column, layout = self._column()
 
-        heading = QLabel("<b>Default compression</b>")
+        heading = QLabel("<b>Default encoding</b>")
         heading.setTextFormat(Qt.TextFormat.RichText)
         layout.addWidget(heading)
 
         note = QLabel(
             "The starting settings for every new job. Each tab has its own "
-            "Compression panel you can tweak before adding a job, so different "
+            "Encoding panel you can tweak before adding a job, so different "
             "jobs can use different settings."
         )
         note.setWordWrap(True)

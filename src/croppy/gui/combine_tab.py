@@ -102,7 +102,7 @@ class CombineTab(QWidget):
         # --- center: one VideoList per group ---
         self.stack = QStackedWidget(splitter)
 
-        # --- right: output + compression for the selected group ---
+        # --- right: output + encoding for the selected group ---
         side = QWidget(splitter)
         side.setMinimumWidth(280)
         v = QVBoxLayout(side)
@@ -121,7 +121,9 @@ class CombineTab(QWidget):
         self.output_picker.changed.connect(self._save_current_output)
         v.addWidget(self.output_picker)
 
-        self.compression = CompressionPanel(initial=controller.default(), expanded=True)
+        self.compression = CompressionPanel(
+            initial=controller.default(), controller=controller, follow_default=False
+        )
         self.compression.settings_changed.connect(self._save_current_settings)
         v.addWidget(self.compression)
 

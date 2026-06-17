@@ -87,7 +87,9 @@ class CompressTab(QWidget):
         v.addWidget(self.output_picker)
 
         # Per-item editor: no controller-follow; it mirrors the selected row.
-        self.compression = CompressionPanel(initial=controller.default(), expanded=True)
+        self.compression = CompressionPanel(
+            initial=controller.default(), controller=controller, follow_default=False
+        )
         self.compression.settings_changed.connect(self._apply_panel_to_selection)
         self.compression.setEnabled(False)
         v.addWidget(self.compression)
