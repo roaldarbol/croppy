@@ -12,16 +12,26 @@ from PySide6.QtWidgets import QApplication
 
 from croppy import __version__
 from croppy.gui.main_window import MainWindow
+from croppy.logging import set_level
 
 
-def run(video: Path | None = None) -> int:
-    """Start the Qt event loop and return its exit code."""
+def run(video: Path | None = None, log_level_override: str | None = None) -> int:
+    """Start the Qt event loop and return its exit code.
+
+    ``log_level_override`` (an explicit CLI ``-v``) wins; otherwise the level the
+    user last chose in the Settings tab is applied.
+    """
     logger.info("croppy {} starting", __version__)
     qt_app = QApplication.instance() or QApplication(sys.argv)
     qt_app.setApplicationName("croppy")
     qt_app.setApplicationDisplayName("croppy")
     # organizationName completes the QSettings storage path (see croppy.config).
     qt_app.setOrganizationName("croppy")
+
+    # QSettings is usable now that the org/app names are set.
+    from croppy.config import load_log_level
+
+    set_level(log_level_override or load_log_level())
 
     window = MainWindow()
     if video is not None:

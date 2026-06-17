@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from croppy.config import (
     load_encode_settings,
+    load_log_level,
     load_parallel_enabled,
     save_encode_settings,
+    save_log_level,
     save_parallel_enabled,
 )
+from croppy.logging import DEFAULT_LEVEL
 from croppy.models import EncodeSettings
 
 
@@ -42,6 +45,20 @@ def test_parallel_enabled_roundtrip() -> None:
     assert load_parallel_enabled() is True
     save_parallel_enabled(False)
     assert load_parallel_enabled() is False
+
+
+def test_log_level_defaults() -> None:
+    assert load_log_level() == DEFAULT_LEVEL
+
+
+def test_log_level_roundtrip() -> None:
+    save_log_level("DEBUG")
+    assert load_log_level() == "DEBUG"
+
+
+def test_log_level_unknown_falls_back_to_default() -> None:
+    save_log_level("NONSENSE")
+    assert load_log_level() == DEFAULT_LEVEL
 
 
 def test_partial_settings_fall_back_to_defaults() -> None:

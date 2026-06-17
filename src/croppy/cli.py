@@ -62,7 +62,9 @@ def main(
     configure_logging(verbose)
     from croppy.app import run  # lazy: keep --help / --version fast and Qt-free
 
-    raise typer.Exit(code=run(video))
+    # An explicit -v wins this session; otherwise app.run honours the persisted
+    # Settings-tab level once QSettings is available.
+    raise typer.Exit(code=run(video, log_level_override="DEBUG" if verbose >= 1 else None))
 
 
 def app() -> None:

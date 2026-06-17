@@ -11,10 +11,12 @@ from dataclasses import fields
 
 from PySide6.QtCore import QSettings
 
+from croppy.logging import DEFAULT_LEVEL, LEVELS
 from croppy.models import EncodeSettings
 
 _ENCODE_GROUP = "encode"
 _PARALLEL_KEY = "processing/parallel_enabled"
+_LOG_LEVEL_KEY = "logging/level"
 
 
 def load_encode_settings() -> EncodeSettings:
@@ -50,3 +52,15 @@ def load_parallel_enabled() -> bool:
 def save_parallel_enabled(enabled: bool) -> None:
     """Persist the parallel-processing toggle across sessions."""
     QSettings().setValue(_PARALLEL_KEY, enabled)
+
+
+def load_log_level() -> str:
+    """Return the persisted log level, falling back to the default if unset or
+    no longer a recognised level."""
+    level = QSettings().value(_LOG_LEVEL_KEY, DEFAULT_LEVEL, type=str)
+    return level if level in LEVELS else DEFAULT_LEVEL
+
+
+def save_log_level(level: str) -> None:
+    """Persist the chosen log level across sessions."""
+    QSettings().setValue(_LOG_LEVEL_KEY, level)
