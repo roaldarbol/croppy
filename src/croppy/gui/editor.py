@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 from croppy.ffmpeg.probe import VideoInfo
 from croppy.gui.canvas import VideoCanvas
 from croppy.gui.compression_panel import CompressionController, CompressionPanel
+from croppy.gui.constants import SIDEBAR_DESCRIPTION_HEIGHT
 from croppy.gui.crop_item import CropRectItem
 from croppy.gui.landing import file_dialog_filter
 from croppy.gui.output_picker import OutputFolderPicker
@@ -154,6 +155,9 @@ class EditorWidget(QWidget):
         self.summary.setWordWrap(True)
         self.summary.setTextFormat(Qt.TextFormat.RichText)
         self.summary.setStyleSheet("color: #888;")
+        # Reserve a consistent height so the controls below align across tabs.
+        self.summary.setFixedHeight(SIDEBAR_DESCRIPTION_HEIGHT)
+        self.summary.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         v.addWidget(self.summary)
 
         self.output_picker = OutputFolderPicker()

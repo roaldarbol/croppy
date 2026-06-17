@@ -31,6 +31,7 @@ from croppy.gui.compression_panel import (
     CompressionPanel,
     summarize_settings,
 )
+from croppy.gui.constants import SIDEBAR_DESCRIPTION_HEIGHT
 from croppy.gui.output_picker import OutputFolderPicker
 from croppy.gui.video_list import VideoList
 from croppy.jobs.job import CompressJob
@@ -92,6 +93,9 @@ class CompressTab(QWidget):
         )
         hint.setWordWrap(True)
         hint.setStyleSheet("color: #888;")
+        # Reserve a consistent height so the controls below align across tabs.
+        hint.setFixedHeight(SIDEBAR_DESCRIPTION_HEIGHT)
+        hint.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         v.addWidget(hint)
 
         # Output folder and encoding both mirror the selected row(s); inactive

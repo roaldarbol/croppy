@@ -27,14 +27,21 @@ class SettingsTab(QWidget):
         super().__init__(parent)
         self._controller = controller
 
+        root = QVBoxLayout(self)
+        root.setContentsMargins(20, 20, 20, 20)
+        root.setSpacing(20)
+
         # Two equal-width columns side by side: encoding left, logging right.
         # Ignored horizontal size policy + equal stretch makes the split exactly
         # 50/50 regardless of either column's natural content width.
-        columns = QHBoxLayout(self)
-        columns.setContentsMargins(20, 20, 20, 20)
+        columns = QHBoxLayout()
         columns.setSpacing(40)
         columns.addWidget(self._build_encoding_column(), 1)
         columns.addWidget(self._build_logging_section(), 1)
+        root.addLayout(columns, 1)
+
+        # One Save row centered at the bottom: it persists the whole tab's settings.
+        root.addLayout(self._build_save_row())
 
     @staticmethod
     def _column() -> tuple[QWidget, QVBoxLayout]:
@@ -67,19 +74,23 @@ class SettingsTab(QWidget):
         self.settings_panel.settings_changed.connect(self._on_edited)
         layout.addWidget(self.settings_panel)
 
-        controls = QHBoxLayout()
+        layout.addStretch(1)
+        return column
+
+    # --- save row -----------------------------------------------------------
+
+    def _build_save_row(self) -> QHBoxLayout:
+        row = QHBoxLayout()
         self.save_btn = QPushButton("Save settings")
         self.save_btn.setEnabled(False)
         self.save_btn.clicked.connect(self._save)
         self._status = QLabel("")
         self._status.setStyleSheet("color: #4caf50;")
-        controls.addWidget(self.save_btn)
-        controls.addWidget(self._status)
-        controls.addStretch(1)
-        layout.addLayout(controls)
-
-        layout.addStretch(1)
-        return column
+        row.addStretch(1)
+        row.addWidget(self.save_btn)
+        row.addWidget(self._status)
+        row.addStretch(1)
+        return row
 
     # --- logging ------------------------------------------------------------
 
@@ -103,29 +114,49 @@ class SettingsTab(QWidget):
         form.setContentsMargins(0, 0, 0, 0)
         self.log_level_combo = QComboBox()
         self.log_level_combo.addItems(LEVELS)
-        # Reflect what is actually active (honours a -v launch override).
+        # Reflect what is actually active (honours a -v launch override); this is
+        # also the baseline we revert to and compare against for unsaved edits.
         active = current_level()
-        self.log_level_combo.setCurrentText(active if active in LEVELS else load_log_level())
+        self._saved_log_level = active if active in LEVELS else load_log_level()
+        self.log_level_combo.setCurrentText(self._saved_log_level)
         self.log_level_combo.setMaximumWidth(240)
-        self.log_level_combo.currentTextChanged.connect(self._on_log_level_changed)
+        self.log_level_combo.currentTextChanged.connect(self._on_edited)
         form.addRow("Log level:", self.log_level_combo)
         layout.addLayout(form)
 
         layout.addStretch(1)
         return column
 
-    def _on_log_level_changed(self, level: str) -> None:
-        set_level(level)
-        save_log_level(level)
+    # --- Qt overrides -------------------------------------------------------
+
+    def showEvent(self, event) -> None:
+        # Returning to the tab discards any unsaved edits: re-seed every field
+        # from what is persisted so the form reflects the last-saved state.
+        super().showEvent(event)
+        self.settings_panel.set_settings(self._controller.default())
+        self.log_level_combo.setCurrentText(self._saved_log_level)
+        self.save_btn.setEnabled(False)
+        self._status.clear()
 
     # --- internals ----------------------------------------------------------
 
+    def _dirty(self) -> bool:
+        """Whether any control differs from what is currently saved."""
+        return (
+            self.settings_panel.settings() != self._controller.default()
+            or self.log_level_combo.currentText() != self._saved_log_level
+        )
+
     def _on_edited(self, *_args) -> None:
-        # Enable Save once the form differs from the saved default.
-        self.save_btn.setEnabled(self.settings_panel.settings() != self._controller.default())
+        # Enable Save once any control differs from the saved state.
+        self.save_btn.setEnabled(self._dirty())
         self._status.clear()
 
     def _save(self) -> None:
         self._controller.set_default(self.settings_panel.settings())
+        level = self.log_level_combo.currentText()
+        set_level(level)
+        save_log_level(level)
+        self._saved_log_level = level
         self.save_btn.setEnabled(False)
         self._status.setText("Saved ✓")

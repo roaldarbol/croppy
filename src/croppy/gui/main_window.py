@@ -52,8 +52,6 @@ class MainWindow(QMainWindow):
         # Match the queue's worker count to the persisted toggle state.
         self._apply_parallel(self.jobs_panel.parallel_enabled())
 
-        self.crop_tab.title_changed.connect(self._on_title_changed)
-
     # --- public API ---------------------------------------------------------
 
     def open_video(self, path: Path) -> None:
@@ -79,6 +77,3 @@ class MainWindow(QMainWindow):
 
     def _apply_parallel(self, enabled: bool) -> None:
         self._queue.set_max_workers(suggested_worker_count() if enabled else 1)
-
-    def _on_title_changed(self, name: str) -> None:
-        self.setWindowTitle(f"croppy — {name}")

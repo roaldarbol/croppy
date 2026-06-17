@@ -46,7 +46,6 @@ class _OpenVideo:
 class CropTab(QWidget):
     """Crop several open videos; the selected one is shown in the editor."""
 
-    title_changed = Signal(str)  # window-title hint (e.g. the open file name)
     video_ready = Signal(object)  # an editor finished loading its video (EditorWidget)
     frame_reloaded = Signal(object)  # an editor finished reloading its preview frame
 
@@ -74,18 +73,22 @@ class CropTab(QWidget):
         self.videos_list = QListWidget()
         self.videos_list.currentRowChanged.connect(self._on_selected)
         lv.addWidget(self.videos_list, 1)
-        lb = QHBoxLayout()
+        # Two rows so the panel's minimum width stays narrow (three buttons in a
+        # single row would force it much wider than the Combine tab's left panel).
+        lb = QVBoxLayout()
         self.add_btn = QPushButton("Add video…")
         self.add_btn.clicked.connect(self._browse_video)
+        lb.addWidget(self.add_btn)
+        edit_row = QHBoxLayout()
         self.duplicate_btn = QPushButton("Duplicate")
         self.duplicate_btn.clicked.connect(self._duplicate_current)
         self.duplicate_btn.setEnabled(False)
         self.remove_btn = QPushButton("Remove")
         self.remove_btn.clicked.connect(self._remove_current)
         self.remove_btn.setEnabled(False)
-        lb.addWidget(self.add_btn)
-        lb.addWidget(self.duplicate_btn)
-        lb.addWidget(self.remove_btn)
+        edit_row.addWidget(self.duplicate_btn)
+        edit_row.addWidget(self.remove_btn)
+        lb.addLayout(edit_row)
         lv.addLayout(lb)
 
         # --- center: an editor per open video, plus an empty placeholder ---
@@ -98,7 +101,9 @@ class CropTab(QWidget):
         splitter.addWidget(self.stack)
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
-        splitter.setSizes([190, 910])
+        # Left pane width (230) and total (1100) match the Combine tab's splitter
+        # so both tabs' left panels open at the same width.
+        splitter.setSizes([230, 870])
         layout.addWidget(splitter)
 
     # --- public API ---------------------------------------------------------
@@ -193,7 +198,6 @@ class CropTab(QWidget):
             self.stack.setCurrentWidget(video.editor)
             self.remove_btn.setEnabled(True)
             self.duplicate_btn.setEnabled(True)
-            self.title_changed.emit(video.path.name)
         else:
             self.stack.setCurrentWidget(self._placeholder)
             self.remove_btn.setEnabled(False)

@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 from croppy.ffmpeg.crop import unique_output_path
 from croppy.ffmpeg.probe import ProbeError, probe
 from croppy.gui.compression_panel import CompressionController, CompressionPanel
+from croppy.gui.constants import SIDEBAR_DESCRIPTION_HEIGHT
 from croppy.gui.output_picker import OutputFolderPicker
 from croppy.gui.video_list import VideoList
 from croppy.jobs.job import CombineJob
@@ -116,6 +117,9 @@ class CombineTab(QWidget):
         )
         hint.setWordWrap(True)
         hint.setStyleSheet("color: #888;")
+        # Reserve a consistent height so the controls below align across tabs.
+        hint.setFixedHeight(SIDEBAR_DESCRIPTION_HEIGHT)
+        hint.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         v.addWidget(hint)
 
         self.output_picker = OutputFolderPicker()
@@ -140,7 +144,9 @@ class CombineTab(QWidget):
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
         splitter.setStretchFactor(2, 0)
-        splitter.setSizes([170, 660, 300])
+        # Left pane width (230) and total (1100) match the Crop tab's splitter so
+        # both tabs' left panels open at the same width.
+        splitter.setSizes([230, 570, 300])
         layout.addWidget(splitter)
 
         self._add_group(select=True)  # start with one empty group
