@@ -3,6 +3,10 @@
 Rows are created from the shared :class:`JobQueue`'s ``job_added`` signal, so
 tabs only have to ``submit`` jobs. The panel drives the queue directly: start
 all / start selected, cancel, remove, and clear-finished.
+
+Rows are grouped by lifecycle state — Running, Pending, Queued, Finished — so
+that a job released but waiting for a free worker slot (Pending) is visually
+distinct from one that was never started (Queued).
 """
 
 from __future__ import annotations
@@ -29,6 +33,13 @@ _KIND_COLORS = {
     "combine": "#9a6cff",
     "compress": "#2bb673",
 }
+
+# Group titles, in display order (lifecycle: staged → waiting → active → done).
+_GROUP_RUNNING = "Running"
+_GROUP_PENDING = "Pending"
+_GROUP_QUEUED = "Queued"
+_GROUP_FINISHED = "Finished"
+_GROUP_ORDER = (_GROUP_QUEUED, _GROUP_PENDING, _GROUP_RUNNING, _GROUP_FINISHED)
 
 
 class JobRow(QWidget):
@@ -65,9 +76,9 @@ class JobRow(QWidget):
         self.bar.setValue(0)
         self.bar.setFormat("%p%")
 
-        self.status = QLabel("queued")
+        self.status = QLabel()
         self.status.setMinimumWidth(72)
-        self.status.setStyleSheet("color: #888;")
+        self.set_queued()
 
         self.cancel_btn = QPushButton("Cancel")
         self.cancel_btn.setFixedWidth(72)
@@ -88,6 +99,15 @@ class JobRow(QWidget):
 
     def set_progress(self, fraction: float) -> None:
         self.bar.setValue(round(fraction * 1000))
+
+    def set_queued(self) -> None:
+        self.status.setText("queued")
+        self.status.setStyleSheet("color: #888;")
+
+    def set_pending(self) -> None:
+        # Released to run, but waiting for a free worker slot.
+        self.status.setText("pending")
+        self.status.setStyleSheet("color: #d0883a;")
 
     def set_running(self) -> None:
         self.status.setText("running")
@@ -114,8 +134,52 @@ class JobRow(QWidget):
         self.cancel_clicked.emit(self._job.id)
 
 
+class _JobGroup(QWidget):
+    """A titled section holding the rows for one lifecycle state.
+
+    Hidden entirely while empty; the header shows the title and a live count.
+    """
+
+    def __init__(self, title: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._title = title
+
+        v = QVBoxLayout(self)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(2)
+
+        self._header = QLabel(title)
+        self._header.setStyleSheet(
+            "color: #aaa; font-weight: bold; padding: 8px 2px 2px 2px;"
+        )
+        v.addWidget(self._header)
+
+        self._body = QWidget()
+        self._body_layout = QVBoxLayout(self._body)
+        self._body_layout.setContentsMargins(0, 0, 0, 0)
+        self._body_layout.setSpacing(2)
+        v.addWidget(self._body)
+
+        self.setVisible(False)
+
+    def add_row(self, row: JobRow) -> None:
+        self._body_layout.addWidget(row)
+        row.show()  # a reparented widget must be re-shown
+
+    def remove_row(self, row: JobRow) -> None:
+        self._body_layout.removeWidget(row)
+
+    def count(self) -> int:
+        return self._body_layout.count()
+
+    def refresh(self) -> None:
+        n = self.count()
+        self.setVisible(n > 0)
+        self._header.setText(f"{self._title}  ({n})")
+
+
 class JobsPanel(QWidget):
-    """Lists every job in the shared queue and lets the user run/manage them."""
+    """Lists every job in the shared queue, grouped by state, and manages them."""
 
     parallel_toggled = Signal(bool)
 
@@ -128,6 +192,7 @@ class JobsPanel(QWidget):
         super().__init__(parent)
         self._queue = queue
         self._rows: dict[int, JobRow] = {}
+        self._row_group: dict[int, str] = {}
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(8, 8, 8, 8)
@@ -175,12 +240,20 @@ class JobsPanel(QWidget):
         self._inner_layout = QVBoxLayout(self._inner)
         self._inner_layout.setContentsMargins(0, 0, 0, 0)
         self._inner_layout.setSpacing(2)
+
+        self._groups: dict[str, _JobGroup] = {}
+        for title in _GROUP_ORDER:
+            group = _JobGroup(title)
+            self._groups[title] = group
+            self._inner_layout.addWidget(group)
         self._inner_layout.addStretch(1)
+
         self._scroll.setWidget(self._inner)
         self._scroll.setVisible(False)
         outer.addWidget(self._scroll, 1)
 
         queue.job_added.connect(self._on_added)
+        queue.job_pending.connect(self._on_pending)
         queue.job_started.connect(self._on_started)
         queue.job_progress.connect(self._on_progress)
         queue.job_finished.connect(self._on_finished)
@@ -212,16 +285,22 @@ class JobsPanel(QWidget):
         row = JobRow(job)
         row.cancel_clicked.connect(self._queue.cancel)
         row.select_check.toggled.connect(self._update_buttons)
-        self._inner_layout.insertWidget(self._inner_layout.count() - 1, row)
         self._rows[job_id] = row
-        self._empty.setVisible(False)
-        self._scroll.setVisible(True)
+        self._place_row(job_id, _GROUP_QUEUED)
+        self._update_buttons()
+
+    def _on_pending(self, job_id: int) -> None:
+        row = self._rows.get(job_id)
+        if row is not None:
+            row.set_pending()
+            self._place_row(job_id, _GROUP_PENDING)
         self._update_buttons()
 
     def _on_started(self, job_id: int) -> None:
         row = self._rows.get(job_id)
         if row is not None:
             row.set_running()
+            self._place_row(job_id, _GROUP_RUNNING)
         self._update_buttons()
 
     def _on_progress(self, job_id: int, microseconds: int) -> None:
@@ -235,31 +314,56 @@ class JobsPanel(QWidget):
         row = self._rows.get(job_id)
         if row is not None:
             row.set_done()
+            self._place_row(job_id, _GROUP_FINISHED)
         self._update_buttons()
 
     def _on_failed(self, job_id: int, message: str) -> None:
         row = self._rows.get(job_id)
         if row is not None:
             row.set_failed(message)
+            self._place_row(job_id, _GROUP_FINISHED)
         self._update_buttons()
 
     def _on_canceled(self, job_id: int) -> None:
         row = self._rows.get(job_id)
         if row is not None:
             row.set_canceled()
+            self._place_row(job_id, _GROUP_FINISHED)
         self._update_buttons()
 
     def _on_removed(self, job_id: int) -> None:
         row = self._rows.pop(job_id, None)
+        group = self._row_group.pop(job_id, None)
         if row is not None:
+            if group is not None:
+                self._groups[group].remove_row(row)
             row.setParent(None)
             row.deleteLater()
-        if not self._rows:
-            self._empty.setVisible(True)
-            self._scroll.setVisible(False)
+        self._refresh_groups()
         self._update_buttons()
 
     # --- internals ----------------------------------------------------------
+
+    def _place_row(self, job_id: int, target: str) -> None:
+        """Move the row into the named group (driven by which signal fired, not
+        ``job.state``, which can lag the signal during the start transition)."""
+        row = self._rows.get(job_id)
+        if row is None:
+            return
+        current = self._row_group.get(job_id)
+        if current != target:
+            if current is not None:
+                self._groups[current].remove_row(row)
+            self._groups[target].add_row(row)
+            self._row_group[job_id] = target
+        self._refresh_groups()
+
+    def _refresh_groups(self) -> None:
+        for group in self._groups.values():
+            group.refresh()
+        has_rows = bool(self._rows)
+        self._empty.setVisible(not has_rows)
+        self._scroll.setVisible(has_rows)
 
     def _checked_rows(self) -> list[JobRow]:
         return [row for row in self._rows.values() if row.is_checked()]

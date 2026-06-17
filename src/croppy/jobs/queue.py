@@ -32,7 +32,8 @@ class JobQueue(QObject):
     only run once explicitly released with :meth:`start` / :meth:`start_all`.
     """
 
-    job_added = Signal(int)  # a job was staged
+    job_added = Signal(int)  # a job was staged (QUEUED)
+    job_pending = Signal(int)  # a staged job was released and is waiting for a worker slot
     job_started = Signal(int)
     job_progress = Signal(int, "qlonglong")  # job_id, microseconds since clip start
     job_finished = Signal(int)
@@ -72,6 +73,7 @@ class JobQueue(QObject):
             if job is not None and job.state == JobState.QUEUED:
                 job.state = JobState.PENDING
                 self._pending.append(job)
+                self.job_pending.emit(job.id)
         self._maybe_start_next()
 
     def start_all(self) -> None:

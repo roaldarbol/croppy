@@ -38,6 +38,7 @@ class StatusStrip(QWidget):
 
         for sig in (
             queue.job_added,
+            queue.job_pending,
             queue.job_started,
             queue.job_finished,
             queue.job_failed,
@@ -64,18 +65,17 @@ class StatusStrip(QWidget):
         for job in jobs:
             counts[job.state] = counts.get(job.state, 0) + 1
 
+        # Compact summary leads with active work; PENDING (released, waiting for a
+        # slot) is shown distinctly from QUEUED (staged, not yet started).
         order = [
             (JobState.RUNNING, "running"),
+            (JobState.PENDING, "pending"),
             (JobState.QUEUED, "queued"),
             (JobState.DONE, "done"),
             (JobState.FAILED, "failed"),
             (JobState.CANCELED, "canceled"),
         ]
         parts = [f"{counts[state]} {word}" for state, word in order if counts.get(state)]
-        # PENDING (released, waiting for a slot) reads as "queued" to the user.
-        pending = counts.get(JobState.PENDING, 0)
-        if pending:
-            parts.insert(0, f"{pending} waiting")
         self._label.setText("  ·  ".join(parts))
 
         running = [j for j in jobs if j.state == JobState.RUNNING]

@@ -83,6 +83,48 @@ def test_status_signals_update_row(qtbot, qapp, tmp_path: Path) -> None:
     assert row.status.toolTip() == "boom"
 
 
+def test_pending_signal_marks_row_pending(qtbot, qapp, tmp_path: Path) -> None:
+    queue = JobQueue()
+    panel = JobsPanel(queue)
+    qtbot.addWidget(panel)
+    job = _crop(tmp_path / "x.mp4")
+    queue.submit(job)
+    row = panel.rows()[0]
+    assert "queued" in row.status.text()
+    assert panel._row_group[job.id] == "Queued"
+
+    queue.job_pending.emit(job.id)  # released, waiting for a worker slot
+
+    assert "pending" in row.status.text()
+    assert panel._row_group[job.id] == "Pending"
+    assert panel._groups["Pending"].count() == 1
+    assert panel._groups["Queued"].count() == 0
+
+
+def test_rows_grouped_by_state(qtbot, qapp, tmp_path: Path) -> None:
+    queue = JobQueue()
+    panel = JobsPanel(queue)
+    qtbot.addWidget(panel)
+    j1 = _crop(tmp_path / "a.mp4")
+    j2 = _crop(tmp_path / "b.mp4")
+    queue.submit(j1)
+    queue.submit(j2)
+    assert panel._groups["Queued"].count() == 2
+
+    queue.job_started.emit(j1.id)  # j1 runs; j2 stays queued
+    assert panel._groups["Running"].count() == 1
+    assert panel._groups["Queued"].count() == 1
+
+    queue.job_finished.emit(j1.id)
+    assert panel._groups["Running"].count() == 0
+    assert panel._groups["Finished"].count() == 1
+    # A job added after starting is clearly distinct: it lands in Queued, not Pending.
+    j3 = _crop(tmp_path / "c.mp4")
+    queue.submit(j3)
+    assert panel._groups["Queued"].count() == 2
+    assert panel._row_group[j3.id] == "Queued"
+
+
 def test_start_all_button(qtbot, qapp, tmp_path: Path) -> None:
     queue = JobQueue()
     queue.start_all = MagicMock()  # patch before connecting in the panel
