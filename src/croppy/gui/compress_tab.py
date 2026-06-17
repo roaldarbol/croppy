@@ -1,12 +1,15 @@
 """Compress tab: re-encode each video smaller, one job per file.
 
-Compression is per video: each row carries its own settings (seeded from the
-default when added). Selecting a row shows its settings in the panel; editing
-the panel writes back to the selected row(s) only.
+Output folder and encoding are per video: each row carries its own
+:class:`_ItemConfig` (seeded from the default when added). Selecting a row shows
+its config in the right panel; editing the panel — or the output folder — writes
+back to the selected row(s) only. With nothing selected the right panel is
+inactive.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 from loguru import logger
@@ -43,6 +46,14 @@ def _duration(path: Path) -> float:
         return 0.0
 
 
+@dataclass
+class _ItemConfig:
+    """Per-video compress configuration carried by each row."""
+
+    settings: EncodeSettings
+    output_dir: Path | None = None  # None → next to the source file
+
+
 class CompressTab(QWidget):
     """Compress N videos, each with its own compression settings."""
 
@@ -55,7 +66,7 @@ class CompressTab(QWidget):
         super().__init__(parent)
         self._controller = controller
         self._queue = queue
-        self._applying = False  # guard panel→item→panel feedback
+        self._loading = False  # guard panel/picker → item → panel feedback
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -74,23 +85,26 @@ class CompressTab(QWidget):
         v.setSpacing(12)
 
         hint = QLabel(
-            "Add videos to compress. Each becomes <name>_compressed in the output "
-            "folder (or next to the original). Select videos to queue just those "
-            "(or none to queue all); compression below applies to the selected "
-            "video(s) only and new videos start from the default."
+            "Add videos to compress. Each becomes <name>_compressed next to the "
+            "original (or in a folder you choose). Select video(s) to set their "
+            "output folder and encoding; with none selected, queueing runs them "
+            "all. New videos start from the default."
         )
         hint.setWordWrap(True)
         hint.setStyleSheet("color: #888;")
         v.addWidget(hint)
 
+        # Output folder and encoding both mirror the selected row(s); inactive
+        # with nothing selected.
         self.output_picker = OutputFolderPicker()
+        self.output_picker.changed.connect(self._apply_output_to_selection)
+        self.output_picker.setEnabled(False)
         v.addWidget(self.output_picker)
 
-        # Per-item editor: no controller-follow; it mirrors the selected row.
         self.compression = CompressionPanel(
             initial=controller.default(), controller=controller, follow_default=False
         )
-        self.compression.settings_changed.connect(self._apply_panel_to_selection)
+        self.compression.settings_changed.connect(self._apply_settings_to_selection)
         self.compression.setEnabled(False)
         v.addWidget(self.compression)
 
@@ -112,29 +126,53 @@ class CompressTab(QWidget):
     def _seed_new_items(self, rows: list[int]) -> None:
         default = self._controller.default()
         for row in rows:
-            self.video_list.set_item_data(row, default, summarize_settings(default))
+            self.video_list.set_item_data(row, _ItemConfig(default), summarize_settings(default))
+
+    def _item_config(self, row: int) -> _ItemConfig:
+        cfg = self.video_list.item_data(row)
+        return cfg if isinstance(cfg, _ItemConfig) else _ItemConfig(self._controller.default())
 
     def _load_selection_into_panel(self) -> None:
         rows = self.video_list.selected_rows()
-        if not rows:
-            self.compression.setEnabled(False)
-            return
-        self.compression.setEnabled(True)
-        current = self.video_list.current_row()
-        settings = self.video_list.item_data(current if current in rows else rows[0])
-        if isinstance(settings, EncodeSettings):
-            self._applying = True
-            try:
-                self.compression.set_settings(settings)
-            finally:
-                self._applying = False
+        active = bool(rows)
+        # The right panel only edits a selected row; inactive (and showing the
+        # default) when nothing is selected, so it never shows a stale row.
+        self.output_picker.setEnabled(active)
+        self.compression.setEnabled(active)
+        self._loading = True
+        try:
+            if not active:
+                self.compression.set_settings(self._controller.default())
+                self.output_picker.dir_edit.setText("")
+                return
+            current = self.video_list.current_row()
+            cfg = self._item_config(current if current in rows else rows[0])
+            self.compression.set_settings(cfg.settings)
+            if cfg.output_dir is not None:
+                self.output_picker.set_output_dir(cfg.output_dir)
+            else:
+                self.output_picker.dir_edit.setText("")
+        finally:
+            self._loading = False
 
-    def _apply_panel_to_selection(self, settings: EncodeSettings) -> None:
-        if self._applying:
+    def _apply_settings_to_selection(self, settings: EncodeSettings) -> None:
+        if self._loading:
             return
-        summary = summarize_settings(settings)
         for row in self.video_list.selected_rows():
-            self.video_list.set_item_data(row, settings, summary)
+            self.video_list.set_item_data(
+                row, _ItemConfig(settings, self._item_config(row).output_dir),
+                summarize_settings(settings),
+            )
+
+    def _apply_output_to_selection(self) -> None:
+        if self._loading:
+            return
+        output_dir = self.output_picker.output_dir() if self.output_picker.has_dir() else None
+        for row in self.video_list.selected_rows():
+            settings = self._item_config(row).settings
+            self.video_list.set_item_data(
+                row, _ItemConfig(settings, output_dir), summarize_settings(settings)
+            )
 
     # --- internals ----------------------------------------------------------
 
@@ -147,18 +185,15 @@ class CompressTab(QWidget):
             return
         # Queue the selected rows; with nothing selected, queue all of them.
         rows = self.video_list.selected_rows() or list(range(len(paths)))
-        output_dir = self.output_picker.output_dir() if self.output_picker.has_dir() else None
 
         # Avoid clobbering outputs already queued or on disk, so the same source
         # can be queued again with different settings to compare the results.
         taken = {job.output_path for job in self._queue.jobs()}
         for row in rows:
             path = paths[row]
-            settings = self.video_list.item_data(row)
-            if not isinstance(settings, EncodeSettings):
-                settings = self._controller.default()
+            cfg = self._item_config(row)
             base = default_compress_output_path(
-                path, container=settings.container, output_dir=output_dir
+                path, container=cfg.settings.container, output_dir=cfg.output_dir
             )
             output_path = unique_output_path(base, taken)
             taken.add(output_path)
@@ -166,7 +201,7 @@ class CompressTab(QWidget):
                 output_path=output_path,
                 duration_seconds=_duration(path),
                 input_path=path,
-                settings=settings,
+                settings=cfg.settings,
             )
             self._queue.submit(job)
         # The list is kept so you can tweak compression and queue again to

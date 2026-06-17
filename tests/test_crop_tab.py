@@ -117,6 +117,20 @@ def test_remove_video(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
     assert len(tab._videos) == 1
 
 
+def test_placeholder_sidebar_inactive(qtbot, qapp) -> None:
+    tab = CropTab(CompressionController(), MagicMock())
+    qtbot.addWidget(tab)
+    # No video open → the placeholder editor's sidebar is inactive.
+    assert not tab._placeholder._sidebar.isEnabled()
+
+
+def test_open_video_activates_sidebar(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
+    tab = CropTab(CompressionController(), MagicMock())
+    qtbot.addWidget(tab)
+    _open(tab, _copy(test_video, tmp_path / "a.mp4"), qtbot)
+    assert tab.current_editor()._sidebar.isEnabled()
+
+
 def test_remove_last_shows_placeholder(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
     tab = CropTab(CompressionController(), MagicMock())
     qtbot.addWidget(tab)

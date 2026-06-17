@@ -1,8 +1,7 @@
 """Editor view: canvas on the left, sidebar (frame picker / crops / process) on the right.
 
 The editor can be constructed empty — the canvas then shows a drop prompt and the
-sidebar is visible but its video-dependent controls stay disabled until
-:meth:`load` is called with a probed video.
+whole sidebar is disabled until :meth:`load` is called with a probed video.
 """
 
 from __future__ import annotations
@@ -63,6 +62,9 @@ class EditorWidget(QWidget):
             self.load(info, image)
         else:
             self._refresh_crops()
+        # The sidebar (output / frame / crops / encoding) is inactive until a
+        # video is loaded — there is nothing to configure without one.
+        self._sidebar.setEnabled(self._info is not None)
 
     # --- public API ---------------------------------------------------------
 
@@ -73,6 +75,7 @@ class EditorWidget(QWidget):
         panel is reset to the default. The output folder is intentionally kept.
         """
         self._info = info
+        self._sidebar.setEnabled(True)
         # Crops and compression belong to the old clip — drop them.
         self.canvas.clear_crops()
         self.compression.reset_to(self._controller.default())
@@ -141,6 +144,7 @@ class EditorWidget(QWidget):
 
     def _build_sidebar(self, parent: QWidget) -> QWidget:
         side = QWidget(parent)
+        self._sidebar = side
         side.setMinimumWidth(280)
         v = QVBoxLayout(side)
         v.setContentsMargins(8, 8, 8, 8)

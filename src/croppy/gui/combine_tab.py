@@ -104,6 +104,7 @@ class CombineTab(QWidget):
 
         # --- right: output + encoding for the selected group ---
         side = QWidget(splitter)
+        self._side = side
         side.setMinimumWidth(280)
         v = QVBoxLayout(side)
         v.setContentsMargins(8, 8, 8, 8)
@@ -183,7 +184,18 @@ class CombineTab(QWidget):
         self._update_queue_enabled()
 
     def _on_group_selected(self, row: int) -> None:
-        if row < 0 or row >= len(self._groups):
+        selected = 0 <= row < len(self._groups)
+        # The right panel is only active for a selected group; with none it shows
+        # the default, inactive.
+        self._side.setEnabled(selected)
+        if not selected:
+            self._loading = True
+            try:
+                self.output_picker.dir_edit.setText("")
+                self.compression.set_settings(self._controller.default())
+            finally:
+                self._loading = False
+            self._update_queue_enabled()
             return
         group = self._groups[row]
         self.stack.setCurrentWidget(group.video_list)

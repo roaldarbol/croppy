@@ -137,6 +137,8 @@ def test_compress_tab_queues_one_job_per_video(
     tab.video_list.add_paths(paths)
     out_dir = tmp_path / "out"
     out_dir.mkdir()
+    # Output folder is per-item: select all, then set it for the selection.
+    tab.video_list._list.selectAll()
     tab.output_picker.set_output_dir(out_dir)
 
     assert tab.queue_btn.isEnabled()
@@ -160,6 +162,7 @@ def test_compress_tab_uniquifies_repeat_outputs(
     tab = CompressTab(CompressionController(), queue)
     qtbot.addWidget(tab)
     tab.video_list.add_paths(_copies(test_video, tmp_path, 1))
+    tab.video_list._list.selectAll()  # select to set the per-item output folder
     tab.output_picker.set_output_dir(tmp_path)
 
     tab._queue_jobs()  # clip0_compressed.mp4
@@ -181,14 +184,13 @@ def test_compress_per_item_settings_are_independent(
     tab.video_list.add_paths(paths)  # both seeded with the default
     default_cq = controller.default().cq
 
-    # Edit only the first row's compression.
+    # Edit only the first row's encoding.
     tab.video_list._list.setCurrentRow(0)
     tab.compression.settings_panel.cq_spin.setValue(default_cq + 5)
 
-    assert tab.video_list.item_data(0).cq == default_cq + 5
-    assert tab.video_list.item_data(1).cq == default_cq  # untouched
+    assert tab.video_list.item_data(0).settings.cq == default_cq + 5
+    assert tab.video_list.item_data(1).settings.cq == default_cq  # untouched
 
-    tab.output_picker.set_output_dir(tmp_path)
     tab.video_list._list.clearSelection()  # no selection → queue all
     tab._queue_jobs()
     jobs = [call.args[0] for call in queue.submit.call_args_list]
@@ -229,6 +231,61 @@ def test_compress_panel_follows_selection(qtbot, qapp, test_video: Path, tmp_pat
     # Back to the first shows the edited value.
     tab.video_list._list.setCurrentRow(0)
     assert tab.compression.settings().cq == base + 7
+
+
+def test_compress_output_folder_is_per_item(
+    qtbot, qapp, test_video: Path, tmp_path: Path
+) -> None:
+    queue = MagicMock()
+    queue.jobs.return_value = []
+    tab = CompressTab(CompressionController(), queue)
+    qtbot.addWidget(tab)
+    paths = _copies(test_video, tmp_path, 2)
+    tab.video_list.add_paths(paths)
+    dir_a = tmp_path / "a"
+    dir_b = tmp_path / "b"
+    dir_a.mkdir()
+    dir_b.mkdir()
+
+    tab.video_list._list.setCurrentRow(0)
+    tab.output_picker.set_output_dir(dir_a)
+    tab.video_list._list.setCurrentRow(1)
+    tab.output_picker.set_output_dir(dir_b)
+
+    tab.video_list._list.clearSelection()  # queue all
+    tab._queue_jobs()
+    jobs = [call.args[0] for call in queue.submit.call_args_list]
+    assert jobs[0].output_path == dir_a / "clip0_compressed.mp4"
+    assert jobs[1].output_path == dir_b / "clip1_compressed.mp4"
+
+
+def test_compress_right_panel_inactive_without_selection(
+    qtbot, qapp, test_video: Path, tmp_path: Path
+) -> None:
+    tab = CompressTab(CompressionController(), MagicMock())
+    qtbot.addWidget(tab)
+    # No selection → output folder + encoding inactive.
+    assert not tab.output_picker.isEnabled()
+    assert not tab.compression.isEnabled()
+
+    tab.video_list.add_paths(_copies(test_video, tmp_path, 1))
+    tab.video_list._list.setCurrentRow(0)
+    assert tab.output_picker.isEnabled()
+    assert tab.compression.isEnabled()
+
+    tab.video_list._list.clearSelection()
+    assert not tab.output_picker.isEnabled()
+    assert not tab.compression.isEnabled()
+
+
+def test_combine_right_panel_tracks_group_selection(qtbot, qapp) -> None:
+    tab = CombineTab(CompressionController(), MagicMock())
+    qtbot.addWidget(tab)
+    # Starts with one group selected → the right panel is active.
+    assert tab._side.isEnabled()
+    # With no group selected it goes inactive.
+    tab._on_group_selected(-1)
+    assert not tab._side.isEnabled()
 
 
 def test_compress_tab_defaults_output_next_to_input(
