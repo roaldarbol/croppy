@@ -35,7 +35,8 @@ def test_rows_carry_name_detail_and_thumbnail(
     qtbot.addWidget(vl)
     a = tmp_path / "clip.mp4"
     shutil.copy(test_video, a)
-    vl.add_paths([a])
+    with qtbot.waitSignal(vl.row_loaded, timeout=5000):
+        vl.add_paths([a])
     item = vl._list.item(0)
     assert item.data(_NAME_ROLE) == "clip.mp4"
     detail = item.data(_DETAIL_ROLE)

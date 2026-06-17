@@ -16,7 +16,7 @@ from pathlib import Path
 
 from loguru import logger
 from PySide6.QtCore import QRect, QSize, Qt, Signal
-from PySide6.QtGui import QColor, QPixmap
+from PySide6.QtGui import QColor, QImage, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
@@ -32,9 +32,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from croppy.ffmpeg.frame import FrameExtractError, extract_frame
-from croppy.ffmpeg.probe import ProbeError, VideoInfo, probe
+from croppy.ffmpeg.preview import probe_with_first_frame
+from croppy.ffmpeg.probe import VideoInfo
 from croppy.gui.landing import file_dialog_filter, is_accepted_video
+from croppy.gui.media_loader import MediaLoader
 
 _PATH_ROLE = Qt.ItemDataRole.UserRole
 _PIX_ROLE = Qt.ItemDataRole.UserRole + 1
@@ -198,10 +199,12 @@ class VideoList(QWidget):
     changed = Signal()
     selection_changed = Signal()
     items_added = Signal(list)  # list[int] of new row indices
+    row_loaded = Signal(int)  # a row's probe + thumbnail finished
 
     def __init__(self, with_duplicate: bool = False, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._last_dir = ""
+        self._loader = MediaLoader(self)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -281,8 +284,10 @@ class VideoList(QWidget):
         for path in paths:
             if not is_accepted_video(path):
                 continue
-            self._list.addItem(self._make_item(path, self._detail(path), self._thumbnail(path)))
+            item = self._make_item(path, "Loading…", QPixmap())
+            self._list.addItem(item)
             new_rows.append(self._list.count() - 1)
+            self._load_item(item, path)
         if new_rows:
             self._update_empty()
             self.items_added.emit(new_rows)
@@ -358,21 +363,42 @@ class VideoList(QWidget):
     def _update_empty(self) -> None:
         self._prompt.setVisible(self._list.count() == 0)
 
-    def _detail(self, path: Path) -> str:
-        try:
-            return _describe(probe(path))
-        except ProbeError as exc:
-            logger.warning("Probe failed for {}: {}", path, exc)
-            return ""
+    def _is_live(self, item: QListWidgetItem) -> bool:
+        """Whether ``item`` is still in the list (it may have been removed mid-load).
 
-    def _thumbnail(self, path: Path) -> QPixmap:
-        try:
-            image = extract_frame(path, frame_number=1)
-        except FrameExtractError as exc:
-            logger.warning("Thumbnail failed for {}: {}", path, exc)
-            return QPixmap()
-        return QPixmap.fromImage(image).scaled(
-            _THUMB,
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation,
-        )
+        Compares by identity only — never dereferences a possibly-deleted item.
+        """
+        return any(self._list.item(i) is item for i in range(self._list.count()))
+
+    def _load_item(self, item: QListWidgetItem, path: Path) -> None:
+        """Probe ``path`` and build its thumbnail off the GUI thread, then fill ``item``."""
+
+        def work() -> tuple[str, QImage]:
+            info, image = probe_with_first_frame(path)  # probe + decode run concurrently
+            # QImage scaling is safe off the GUI thread; QPixmap is not, so the scaled
+            # QImage is converted in the GUI-thread callback below.
+            thumb = image.scaled(
+                _THUMB,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            return _describe(info), thumb
+
+        def done(result: tuple[str, QImage]) -> None:
+            if not self._is_live(item):
+                return
+            detail, thumb = result
+            item.setData(_DETAIL_ROLE, detail)
+            item.setData(_PIX_ROLE, QPixmap.fromImage(thumb))
+            self._list.update(self._list.indexFromItem(item))
+            self.row_loaded.emit(self._list.row(item))
+
+        def failed(message: str) -> None:
+            logger.warning("Load failed for {}: {}", path, message)
+            if not self._is_live(item):
+                return
+            item.setData(_DETAIL_ROLE, "")
+            self._list.update(self._list.indexFromItem(item))
+            self.row_loaded.emit(self._list.row(item))
+
+        self._loader.submit(work, done, failed)

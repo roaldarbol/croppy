@@ -18,13 +18,19 @@ def _copy(test_video: Path, dest: Path) -> Path:
     return dest
 
 
+def _open(tab: CropTab, path: Path, qtbot) -> None:
+    """Open a video and wait for its async probe + preview load to finish."""
+    with qtbot.waitSignal(tab.video_ready, timeout=5000):
+        tab.open_video(path)
+
+
 def test_opens_multiple_videos(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
     tab = CropTab(CompressionController(), MagicMock())
     qtbot.addWidget(tab)
     a = _copy(test_video, tmp_path / "a.mp4")
     b = _copy(test_video, tmp_path / "b.mp4")
-    tab.open_video(a)
-    tab.open_video(b)
+    _open(tab, a, qtbot)
+    _open(tab, b, qtbot)
     assert tab.videos_list.count() == 2
     # The most recently opened video is selected.
     assert tab.current_editor() is tab._videos[1].editor
@@ -33,10 +39,10 @@ def test_opens_multiple_videos(qtbot, qapp, test_video: Path, tmp_path: Path) ->
 def test_per_video_crops_are_isolated(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
     tab = CropTab(CompressionController(), MagicMock())
     qtbot.addWidget(tab)
-    tab.open_video(_copy(test_video, tmp_path / "a.mp4"))
+    _open(tab, _copy(test_video, tmp_path / "a.mp4"), qtbot)
     tab.current_editor().canvas.add_crop(QRectF(0, 0, 80, 80))
 
-    tab.open_video(_copy(test_video, tmp_path / "b.mp4"))
+    _open(tab, _copy(test_video, tmp_path / "b.mp4"), qtbot)
     assert tab.current_editor().canvas.crops() == []  # new video starts clean
 
     tab.videos_list.setCurrentRow(0)  # back to the first
@@ -50,7 +56,7 @@ def test_queue_editor_submits_one_job_per_crop(
     tab = CropTab(CompressionController(), queue)
     qtbot.addWidget(tab)
     a = _copy(test_video, tmp_path / "a.mp4")
-    tab.open_video(a)
+    _open(tab, a, qtbot)
     editor = tab.current_editor()
     editor.canvas.add_crop(QRectF(0, 0, 100, 100))
     editor.canvas.add_crop(QRectF(20, 20, 60, 60))
@@ -66,14 +72,15 @@ def test_duplicate_copies_crops_and_settings(qtbot, qapp, test_video: Path, tmp_
     tab = CropTab(CompressionController(), MagicMock())
     qtbot.addWidget(tab)
     a = _copy(test_video, tmp_path / "a.mp4")
-    tab.open_video(a)
+    _open(tab, a, qtbot)
     src = tab.current_editor()
     src.canvas.add_crop(QRectF(0, 0, 100, 100))
     src.canvas.add_crop(QRectF(20, 20, 60, 60))
     base_cq = src.encode_settings().cq
     src.compression.settings_panel.cq_spin.setValue(base_cq + 4)
 
-    tab.duplicate_btn.click()
+    with qtbot.waitSignal(tab.video_ready, timeout=5000):
+        tab.duplicate_btn.click()
 
     assert tab.videos_list.count() == 2
     dup = tab.current_editor()
@@ -90,7 +97,7 @@ def test_queue_uniquifies_repeat_outputs(qtbot, qapp, test_video: Path, tmp_path
     queue.submit.side_effect = lambda job: submitted.append(job)
     tab = CropTab(CompressionController(), queue)
     qtbot.addWidget(tab)
-    tab.open_video(_copy(test_video, tmp_path / "a.mp4"))
+    _open(tab, _copy(test_video, tmp_path / "a.mp4"), qtbot)
     tab.current_editor().canvas.add_crop(QRectF(0, 0, 100, 100))
 
     tab.current_editor().process_btn.click()  # a_crop1.mp4
@@ -102,8 +109,8 @@ def test_queue_uniquifies_repeat_outputs(qtbot, qapp, test_video: Path, tmp_path
 def test_remove_video(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
     tab = CropTab(CompressionController(), MagicMock())
     qtbot.addWidget(tab)
-    tab.open_video(_copy(test_video, tmp_path / "a.mp4"))
-    tab.open_video(_copy(test_video, tmp_path / "b.mp4"))
+    _open(tab, _copy(test_video, tmp_path / "a.mp4"), qtbot)
+    _open(tab, _copy(test_video, tmp_path / "b.mp4"), qtbot)
     tab.videos_list.setCurrentRow(0)
     tab._remove_current()
     assert tab.videos_list.count() == 1
@@ -113,7 +120,7 @@ def test_remove_video(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
 def test_remove_last_shows_placeholder(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
     tab = CropTab(CompressionController(), MagicMock())
     qtbot.addWidget(tab)
-    tab.open_video(_copy(test_video, tmp_path / "a.mp4"))
+    _open(tab, _copy(test_video, tmp_path / "a.mp4"), qtbot)
     tab._remove_current()
     assert tab.videos_list.count() == 0
     assert tab.current_editor() is None

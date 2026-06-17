@@ -13,6 +13,7 @@ from pathlib import Path
 
 from loguru import logger
 from PySide6.QtCore import QRectF, Qt, Signal
+from PySide6.QtGui import QImage
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -26,10 +27,12 @@ from PySide6.QtWidgets import (
 )
 
 from croppy.ffmpeg.crop import default_output_path, unique_output_path
-from croppy.ffmpeg.frame import FrameExtractError, extract_frame
-from croppy.ffmpeg.probe import ProbeError, probe
+from croppy.ffmpeg.frame import extract_frame
+from croppy.ffmpeg.preview import probe_with_first_frame
+from croppy.ffmpeg.probe import VideoInfo, probe
 from croppy.gui.compression_panel import CompressionController
 from croppy.gui.editor import EditorWidget
+from croppy.gui.media_loader import MediaLoader
 from croppy.jobs.job import CropJob
 from croppy.jobs.queue import JobQueue
 
@@ -44,6 +47,8 @@ class CropTab(QWidget):
     """Crop several open videos; the selected one is shown in the editor."""
 
     title_changed = Signal(str)  # window-title hint (e.g. the open file name)
+    video_ready = Signal(object)  # an editor finished loading its video (EditorWidget)
+    frame_reloaded = Signal(object)  # an editor finished reloading its preview frame
 
     def __init__(
         self,
@@ -55,6 +60,7 @@ class CropTab(QWidget):
         self._controller = controller
         self._queue = queue
         self._videos: list[_OpenVideo] = []
+        self._loader = MediaLoader(self)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -99,17 +105,25 @@ class CropTab(QWidget):
 
     def open_video(self, path: Path) -> None:
         logger.info("Crop: opening {}", path)
-        try:
-            info = probe(path)
-            image = extract_frame(path, frame_number=1)
-        except (ProbeError, FrameExtractError) as exc:
-            logger.error("Could not open {}: {}", path, exc)
-            QMessageBox.critical(self, "croppy", f"Could not open <b>{path.name}</b>:<br><br>{exc}")
-            return
-
         editor = EditorWidget(controller=self._controller)
-        editor.load(info, image)
+        editor.show_loading(path.name)
         self._register_editor(path, editor)
+
+        def done(result: tuple[VideoInfo, QImage]) -> None:
+            if self._video_for(editor) is None:  # removed while loading
+                return
+            info, image = result
+            editor.load(info, image)
+            self.video_ready.emit(editor)
+
+        def failed(message: str) -> None:
+            logger.error("Could not open {}: {}", path, message)
+            self._remove_editor(editor)
+            QMessageBox.critical(
+                self, "croppy", f"Could not open <b>{path.name}</b>:<br><br>{message}"
+            )
+
+        self._loader.submit(lambda: probe_with_first_frame(path), done, failed)
 
     def current_editor(self) -> EditorWidget | None:
         row = self.videos_list.currentRow()
@@ -138,22 +152,40 @@ class CropTab(QWidget):
             return
         src = self._videos[row]
         frame = src.editor.frame_spin.value()
-        try:
-            info = probe(src.path)
-            image = extract_frame(src.path, frame_number=frame)
-        except (ProbeError, FrameExtractError) as exc:
-            logger.warning("Could not duplicate {}: {}", src.path, exc)
-            return
+        # Snapshot the source's crops/settings/output now (no ffmpeg needed); they
+        # are applied once the duplicate's preview frame has loaded.
+        crop_rects = [crop.crop_region() for crop in src.editor.canvas.crops()]
+        settings = src.editor.encode_settings()
+        output_dir = src.editor.output_dir()
+        # The duplicate is the same file the source already probed — reuse its
+        # VideoInfo so we only re-open the file for the one frame we need.
+        src_info = src.editor.info()
 
         editor = EditorWidget(controller=self._controller)
-        editor.load(info, image)
-        editor.frame_spin.setValue(frame)
-        for crop in src.editor.canvas.crops():
-            r = crop.crop_region()
-            editor.canvas.add_crop(QRectF(r.x, r.y, r.w, r.h))
-        editor.compression.adopt(src.editor.encode_settings())
-        editor.set_output_dir(src.editor.output_dir())
+        editor.show_loading(src.path.name)
         self._register_editor(src.path, editor, at=row + 1)
+
+        def done(result: tuple[VideoInfo, QImage]) -> None:
+            if self._video_for(editor) is None:
+                return
+            info, image = result
+            editor.load(info, image)
+            editor.frame_spin.setValue(frame)
+            for r in crop_rects:
+                editor.canvas.add_crop(QRectF(r.x, r.y, r.w, r.h))
+            editor.compression.adopt(settings)
+            editor.set_output_dir(output_dir)
+            self.video_ready.emit(editor)
+
+        def failed(message: str) -> None:
+            logger.warning("Could not duplicate {}: {}", src.path, message)
+            self._remove_editor(editor)
+
+        def work() -> tuple[VideoInfo, QImage]:
+            info = src_info or probe(src.path)
+            return info, extract_frame(src.path, frame_number=frame, fps=info.fps)
+
+        self._loader.submit(work, done, failed)
 
     def _on_selected(self, row: int) -> None:
         if 0 <= row < len(self._videos):
@@ -171,13 +203,21 @@ class CropTab(QWidget):
         row = self.videos_list.currentRow()
         if not (0 <= row < len(self._videos)):
             return
-        video = self._videos.pop(row)
-        self.stack.removeWidget(video.editor)
-        video.editor.deleteLater()
+        self._remove_editor(self._videos[row].editor)
+
+    def _remove_editor(self, editor: EditorWidget) -> None:
+        video = self._video_for(editor)
+        if video is None:
+            return
+        row = self._videos.index(video)
+        self._videos.pop(row)
+        self.stack.removeWidget(editor)
+        editor.deleteLater()
         self.videos_list.takeItem(row)
         if not self._videos:
             self.stack.setCurrentWidget(self._placeholder)
             self.remove_btn.setEnabled(False)
+            self.duplicate_btn.setEnabled(False)
 
     def _video_for(self, editor: EditorWidget) -> _OpenVideo | None:
         return next((v for v in self._videos if v.editor is editor), None)
@@ -186,15 +226,28 @@ class CropTab(QWidget):
         video = self._video_for(editor)
         if video is None:
             return
-        try:
-            image = extract_frame(video.path, frame_number=frame_number)
-        except FrameExtractError as exc:
-            logger.warning("Reload frame {} failed: {}", frame_number, exc)
+        info = editor.info()
+        fps = info.fps if info is not None else None
+        editor.reload_btn.setEnabled(False)
+
+        def done(image: QImage) -> None:
+            if self._video_for(editor) is None:
+                return
+            editor.set_image(image)
+            editor.reload_btn.setEnabled(True)
+            self.frame_reloaded.emit(editor)
+
+        def failed(message: str) -> None:
+            logger.warning("Reload frame {} failed: {}", frame_number, message)
+            if self._video_for(editor) is not None:
+                editor.reload_btn.setEnabled(True)
             QMessageBox.warning(
-                self, "croppy", f"Could not extract frame {frame_number}:<br><br>{exc}"
+                self, "croppy", f"Could not extract frame {frame_number}:<br><br>{message}"
             )
-            return
-        editor.set_image(image)
+
+        self._loader.submit(
+            lambda: extract_frame(video.path, frame_number=frame_number, fps=fps), done, failed
+        )
 
     def _queue_editor(self, editor: EditorWidget) -> None:
         video = self._video_for(editor)

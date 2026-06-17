@@ -97,6 +97,10 @@ class EditorWidget(QWidget):
     def set_image(self, image: QImage) -> None:
         self.canvas.set_image(image)
 
+    def show_loading(self, name: str) -> None:
+        """Show a brief 'loading' note while the video is probed off-thread."""
+        self.summary.setText(f"Loading <b>{name}</b>…")
+
     def info(self) -> VideoInfo | None:
         return self._info
 

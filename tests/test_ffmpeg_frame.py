@@ -23,6 +23,15 @@ def test_extract_middle_frame(qapp, test_video: Path) -> None:
     assert image.height() == 240
 
 
+def test_extract_frame_with_fps_seek(qapp, test_video: Path) -> None:
+    # With fps supplied, a later frame is reached via an -ss seek instead of a
+    # linear decode-from-start; it should still decode a valid frame.
+    image = extract_frame(test_video, frame_number=30, fps=30.0)
+    assert not image.isNull()
+    assert image.width() == 320
+    assert image.height() == 240
+
+
 def test_extract_frame_past_end_raises(qapp, test_video: Path) -> None:
     with pytest.raises(FrameExtractError):
         extract_frame(test_video, frame_number=9999)
@@ -36,3 +45,12 @@ def test_extract_frame_missing_file_raises(qapp, tmp_path: Path) -> None:
 def test_extract_frame_zero_raises(qapp, test_video: Path) -> None:
     with pytest.raises(ValueError):
         extract_frame(test_video, frame_number=0)
+
+
+def test_probe_with_first_frame(qapp, test_video: Path) -> None:
+    from croppy.ffmpeg.preview import probe_with_first_frame
+
+    info, image = probe_with_first_frame(test_video)
+    assert info.width == 320 and info.height == 240
+    assert not image.isNull()
+    assert image.width() == 320
