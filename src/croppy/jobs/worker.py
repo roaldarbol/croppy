@@ -32,6 +32,7 @@ class Worker(QObject):
         self._proc.finished.connect(self._on_finished)
         self._stderr_buf = bytearray()
         self._canceled = False
+        self._finalizing = False
 
     @property
     def job(self) -> Job:
@@ -79,6 +80,16 @@ class Worker(QObject):
             self.canceled.emit(self._job.id)
             return
         if code == 0 and exit_status == QProcess.ExitStatus.NormalExit:
+            if not self._finalizing:
+                finalize = self._job.finalize_command()
+                if finalize is not None:
+                    # Encode done; run the finalize pass (e.g. fragmented → indexed)
+                    # as a second process so the GUI thread never blocks on it.
+                    self._finalizing = True
+                    self._stderr_buf.clear()
+                    logger.debug("Worker[{}] finalizing: {}", self._job.id, " ".join(finalize))
+                    self._proc.start(finalize[0], finalize[1:])
+                    return
             try:
                 self._job.on_success()
             except OSError as exc:

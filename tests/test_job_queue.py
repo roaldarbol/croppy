@@ -8,7 +8,7 @@ import pytest
 
 from croppy.ffmpeg.crop import default_output_path
 from croppy.ffmpeg.probe import probe
-from croppy.jobs.job import CropJob, JobState
+from croppy.jobs.job import CombineJob, CropJob, JobState
 from croppy.jobs.queue import JobQueue, suggested_worker_count
 from croppy.models import CropRegion, EncodeSettings
 
@@ -40,6 +40,30 @@ def test_queue_submits_and_runs_one_job(qtbot, qapp, test_video: Path, tmp_path:
     out_info = probe(out)
     assert out_info.width == 160
     assert out_info.height == 120
+
+
+def test_combine_job_produces_indexed_output(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
+    """End-to-end: a combine job finalizes its fragmented partial into an indexed
+    (non-fragmented) mp4 that opens fast — and leaves no temp files behind."""
+    out = tmp_path / "joined.mp4"
+    job = CombineJob(
+        output_path=out,
+        duration_seconds=4.0,
+        inputs=[test_video, test_video],
+        settings=EncodeSettings(encoder="libx264", preset="ultrafast", audio_mode="copy"),
+    )
+    queue = JobQueue()
+    with qtbot.waitSignal(queue.job_finished, timeout=60000):
+        queue.submit(job)
+        queue.start_all()
+
+    assert job.state == JobState.DONE
+    assert out.is_file()
+    # The final file is a normal, indexed mp4 — no fragment headers.
+    assert b"moof" not in out.read_bytes()
+    # Temp files are gone.
+    assert not job.partial_output.exists()
+    assert not (tmp_path / "joined.partial-indexed.mp4").exists()
 
 
 def test_queue_emits_progress(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:

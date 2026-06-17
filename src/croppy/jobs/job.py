@@ -16,6 +16,7 @@ from typing import ClassVar
 
 from croppy.ffmpeg.combine import (
     build_combine_command,
+    build_faststart_remux_command,
     partial_path,
     write_concat_list,
 )
@@ -72,6 +73,15 @@ class Job(ABC):
     def build_command(self) -> list[str]:
         """Return the ffmpeg argv for this job (writes to :attr:`partial_output`)."""
 
+    def finalize_command(self) -> list[str] | None:
+        """Optional second ffmpeg pass run after a successful encode.
+
+        ``None`` (the default) means there is nothing to finalize. Combine uses
+        this to remux its crash-safe fragmented partial into an indexed file;
+        crop and compress write their final layout directly and skip it.
+        """
+        return None
+
     def on_success(self) -> None:
         """Promote the finished ``.partial`` file to the real output name."""
         partial = self.partial_output
@@ -126,13 +136,31 @@ class CombineJob(Job):
         write_concat_list(self.inputs, self.list_path)
         return build_combine_command(self.list_path, self.partial_output, self.settings)
 
+    def finalize_command(self) -> list[str]:
+        # Remux the crash-safe fragmented partial into an indexed, faststart mp4
+        # (stream copy, no re-encode) so the final file opens and seeks fast.
+        return build_faststart_remux_command(self.partial_output, self._finalized_output)
+
+    @property
+    def _finalized_output(self) -> Path:
+        """Temp the finalize pass writes; renamed to ``output_path`` on success."""
+        return self.output_path.with_name(f"{self.output_path.stem}.partial-indexed.mp4")
+
     def on_success(self) -> None:
-        super().on_success()  # rename .partial.mp4 → final
+        # The indexed remux is the real output; fall back to the fragmented
+        # partial only if the finalize somehow produced nothing.
+        finalized = self._finalized_output
+        if finalized.exists():
+            finalized.replace(self.output_path)
+        elif self.partial_output.exists():
+            self.partial_output.replace(self.output_path)
+        self.partial_output.unlink(missing_ok=True)
         self._remove_list()
 
     def on_cleanup(self) -> None:
-        # Keep the fragmented .partial.mp4 (it's playable up to where it stopped);
-        # only drop the concat list.
+        # Keep the fragmented .partial.mp4 (playable up to where it stopped);
+        # drop the half-written indexed remux and the concat list.
+        self._finalized_output.unlink(missing_ok=True)
         self._remove_list()
 
     def _remove_list(self) -> None:

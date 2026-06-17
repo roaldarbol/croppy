@@ -6,6 +6,7 @@ from pathlib import Path
 
 from croppy.ffmpeg.combine import (
     build_combine_command,
+    build_faststart_remux_command,
     default_combine_output_path,
     partial_path,
     write_concat_list,
@@ -59,7 +60,30 @@ def test_combine_job_targets_partial(tmp_path: Path) -> None:
     assert cmd[-1] == str(tmp_path / "final.partial.mp4")
 
 
-def test_combine_job_on_success_renames_partial(tmp_path: Path) -> None:
+def test_faststart_remux_command_shape(tmp_path: Path) -> None:
+    cmd = build_faststart_remux_command(tmp_path / "in.partial.mp4", tmp_path / "out.mp4")
+    assert cmd[cmd.index("-i") + 1] == str(tmp_path / "in.partial.mp4")
+    assert cmd[cmd.index("-c") + 1] == "copy"  # stream copy, no re-encode
+    assert cmd[cmd.index("-movflags") + 1] == "+faststart"
+    assert cmd[-1] == str(tmp_path / "out.mp4")
+
+
+def test_combine_finalize_remuxes_partial_to_indexed(tmp_path: Path) -> None:
+    final = tmp_path / "final.mp4"
+    job = CombineJob(
+        output_path=final,
+        duration_seconds=10,
+        inputs=[tmp_path / "a.mp4"],
+        settings=EncodeSettings(),
+    )
+    cmd = job.finalize_command()
+    # Reads the fragmented partial, writes the indexed remux temp.
+    assert cmd[cmd.index("-i") + 1] == str(partial_path(final))
+    assert cmd[cmd.index("-movflags") + 1] == "+faststart"
+    assert cmd[-1].endswith(".partial-indexed.mp4")
+
+
+def test_combine_job_on_success_ships_indexed_remux(tmp_path: Path) -> None:
     final = tmp_path / "final.mp4"
     job = CombineJob(
         output_path=final,
@@ -69,16 +93,18 @@ def test_combine_job_on_success_renames_partial(tmp_path: Path) -> None:
     )
     assert job.list_path is not None
     job.list_path.write_text("file 'x'\n", encoding="utf-8")
-    partial_path(final).write_bytes(b"data")
+    partial_path(final).write_bytes(b"fragmented")
+    Path(job.finalize_command()[-1]).write_bytes(b"indexed")
 
     job.on_success()
 
-    assert final.read_bytes() == b"data"
+    # The indexed remux becomes the final output; the fragmented partial is dropped.
+    assert final.read_bytes() == b"indexed"
     assert not partial_path(final).exists()
-    assert not job.list_path.exists()  # concat list cleaned up
+    assert not job.list_path.exists()
 
 
-def test_combine_job_on_cleanup_keeps_partial(tmp_path: Path) -> None:
+def test_combine_job_on_cleanup_keeps_partial_drops_remux(tmp_path: Path) -> None:
     final = tmp_path / "final.mp4"
     job = CombineJob(
         output_path=final,
@@ -89,9 +115,12 @@ def test_combine_job_on_cleanup_keeps_partial(tmp_path: Path) -> None:
     assert job.list_path is not None
     job.list_path.write_text("file 'x'\n", encoding="utf-8")
     partial_path(final).write_bytes(b"half")
+    remux = Path(job.finalize_command()[-1])
+    remux.write_bytes(b"half-indexed")
 
     job.on_cleanup()
 
-    # The playable partial is kept; only the concat list is removed.
+    # The playable fragmented partial is kept; the half-written remux + list go.
     assert partial_path(final).exists()
+    assert not remux.exists()
     assert not job.list_path.exists()

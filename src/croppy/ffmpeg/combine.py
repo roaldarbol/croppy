@@ -66,6 +66,34 @@ def build_combine_command(
     ]
 
 
+def build_faststart_remux_command(src: Path, dst: Path) -> list[str]:
+    """Return the ffmpeg argv that remuxes a fragmented mp4 into an indexed one.
+
+    Fragmented output is crash-safe but has no single index, so it is slow to
+    open and seek (a player must walk every fragment header). A stream copy
+    (``-c copy``) rewrites it into a normal mp4 with a ``moov`` index moved to
+    the front (``+faststart``) — fast to open anywhere, at no quality cost and
+    without re-encoding. Includes ``-progress pipe:1`` so the Worker can report
+    progress during the copy.
+    """
+    return [
+        str(find_ffmpeg()),
+        "-y",
+        "-loglevel",
+        "error",
+        "-nostats",
+        "-i",
+        str(src),
+        "-c",
+        "copy",
+        "-movflags",
+        "+faststart",
+        "-progress",
+        "pipe:1",
+        str(dst),
+    ]
+
+
 def default_combine_output_path(
     first_input: Path,
     output_dir: Path | None = None,
