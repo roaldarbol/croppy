@@ -22,7 +22,6 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
     QHBoxLayout,
-    QLabel,
     QListWidget,
     QListWidgetItem,
     QPushButton,
@@ -34,6 +33,7 @@ from PySide6.QtWidgets import (
 
 from croppy.ffmpeg.preview import probe_with_first_frame
 from croppy.ffmpeg.probe import VideoInfo
+from croppy.gui.drop_hint import DropHint
 from croppy.gui.landing import file_dialog_filter, is_accepted_video
 from croppy.gui.media_loader import MediaLoader
 
@@ -220,11 +220,8 @@ class VideoList(QWidget):
         self._list.browse_requested.connect(self.open_dialog)
         layout.addWidget(self._list)
 
-        # Centered prompt shown only when the list is empty (matches the Crop canvas).
-        self._prompt = QLabel("Drop videos here\nor click to browse", self._list.viewport())
-        self._prompt.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._prompt.setStyleSheet("color: #888; font-size: 16px;")
-        self._prompt.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        # Centered logo + prompt shown only when the list is empty (matches the Crop canvas).
+        self._prompt = DropHint("Drop videos here\nor click to browse", self._list.viewport())
         self._list.center_widget = self._prompt
 
         # Floating action buttons hovering over the list, bottom-centered.

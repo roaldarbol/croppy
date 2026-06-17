@@ -13,6 +13,7 @@ from PySide6.QtWidgets import QApplication
 from croppy import __version__
 from croppy.gui.main_window import MainWindow
 from croppy.logging import set_level
+from croppy.resources import app_icon
 
 
 def run(video: Path | None = None, log_level_override: str | None = None) -> int:
@@ -27,6 +28,7 @@ def run(video: Path | None = None, log_level_override: str | None = None) -> int
     qt_app.setApplicationDisplayName("croppy")
     # organizationName completes the QSettings storage path (see croppy.config).
     qt_app.setOrganizationName("croppy")
+    qt_app.setWindowIcon(app_icon())
 
     # QSettings is usable now that the org/app names are set.
     from croppy.config import load_log_level

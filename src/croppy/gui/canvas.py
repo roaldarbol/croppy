@@ -18,11 +18,11 @@ from PySide6.QtWidgets import (
     QGraphicsRectItem,
     QGraphicsScene,
     QGraphicsView,
-    QLabel,
     QWidget,
 )
 
 from croppy.gui.crop_item import CropRectItem
+from croppy.gui.drop_hint import DropHint
 from croppy.gui.landing import first_accepted
 
 _DRAFT_MIN_SIDE = 6.0
@@ -57,11 +57,8 @@ class VideoCanvas(QGraphicsView):
         self._draft: QGraphicsRectItem | None = None
         self._draft_origin: QPointF | None = None
 
-        # Centered prompt shown until a video is loaded.
-        self._placeholder = QLabel("Drop a video here\nor click to browse", self.viewport())
-        self._placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._placeholder.setStyleSheet("color: #888; font-size: 16px;")
-        self._placeholder.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        # Centered logo + prompt shown until a video is loaded.
+        self._placeholder = DropHint("Drop a video here\nor click to browse", self.viewport())
         self._position_overlays()
 
         self._scene.selectionChanged.connect(self._emit_selection)
