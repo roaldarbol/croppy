@@ -63,7 +63,12 @@ def probe(path: Path | str) -> VideoInfo:
     except subprocess.CalledProcessError as exc:
         raise ProbeError(f"ffprobe failed: {exc.stderr.strip()}") from exc
 
-    data = json.loads(result.stdout)
+    try:
+        data = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        # ffprobe occasionally returns empty/partial output under heavy load;
+        # surface it as a clean ProbeError instead of crashing the caller.
+        raise ProbeError(f"ffprobe returned unreadable output for {video_path}: {exc}") from exc
     streams = data.get("streams") or []
     if not streams:
         raise ProbeError(f"No video stream found in {video_path}")

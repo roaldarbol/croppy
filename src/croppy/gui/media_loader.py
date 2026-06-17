@@ -9,10 +9,12 @@ the UI keeps repainting and responding while the work happens.
 
 from __future__ import annotations
 
+import weakref
 from collections.abc import Callable
 from typing import Any
 
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
+from shiboken6 import isValid
 
 
 class _TaskSignals(QObject):
@@ -44,11 +46,33 @@ class MediaLoader(QObject):
     widgets — the task may finish, but its callbacks never run.
     """
 
+    #: Every live loader, so background work can be drained deterministically
+    #: (see :meth:`drain_all`).
+    _instances: weakref.WeakSet[MediaLoader] = weakref.WeakSet()
+
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._pool = QThreadPool(self)
         # Keep each task's signals + callbacks alive until it has fired.
         self._callbacks: dict[_TaskSignals, tuple[Callable, Callable]] = {}
+        MediaLoader._instances.add(self)
+
+    @classmethod
+    def drain_all(cls, timeout_ms: int = 10_000) -> None:
+        """Block until every live loader's in-flight tasks finish.
+
+        Without this, a worker thread can still be running ffmpeg when its loader
+        is garbage-collected mid-event-loop — harmless log noise on Windows, a
+        hard segfault on macOS. Tests call this after each test so no background
+        work crosses a test boundary.
+        """
+        for loader in list(cls._instances):
+            try:
+                if isValid(loader):
+                    loader._pool.waitForDone(timeout_ms)
+            except RuntimeError:
+                # The C++ object was already deleted — nothing left to wait for.
+                pass
 
     def submit(
         self,
