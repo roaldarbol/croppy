@@ -15,6 +15,7 @@ from croppy.gui.crop_tab import CropTab
 from croppy.gui.jobs_panel import JobsPanel
 from croppy.gui.settings_tab import SettingsTab
 from croppy.gui.status_strip import StatusStrip
+from croppy.gui.theme import apply_app_theme, watch_app_palette
 from croppy.jobs.queue import JobQueue, suggested_worker_count
 
 
@@ -23,6 +24,10 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("croppy")
         self.resize(1340, 820)
+
+        # App-wide border styling (GitHub-like), refreshed on a live theme switch.
+        apply_app_theme()
+        watch_app_palette(self, apply_app_theme)
 
         # Shared across every tab.
         self._controller = CompressionController(self)

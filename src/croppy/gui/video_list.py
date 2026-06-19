@@ -16,7 +16,7 @@ from pathlib import Path
 
 from loguru import logger
 from PySide6.QtCore import QRect, QSize, Qt, Signal
-from PySide6.QtGui import QColor, QImage, QPixmap
+from PySide6.QtGui import QImage, QPalette, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
@@ -33,9 +33,16 @@ from PySide6.QtWidgets import (
 
 from croppy.ffmpeg.preview import probe_with_first_frame
 from croppy.ffmpeg.probe import VideoInfo
+from croppy.gui.constants import PANEL_HEADER_HEIGHT, PANEL_MARGIN
 from croppy.gui.drop_hint import DropHint
 from croppy.gui.landing import file_dialog_filter, is_accepted_video
 from croppy.gui.media_loader import MediaLoader
+from croppy.gui.theme import (
+    border_color,
+    primary_surface,
+    secondary_surface,
+    watch_app_palette,
+)
 
 _PATH_ROLE = Qt.ItemDataRole.UserRole
 _PIX_ROLE = Qt.ItemDataRole.UserRole + 1
@@ -70,7 +77,8 @@ class _VideoItemDelegate(QStyledItemDelegate):
 
         rect = option.rect
         thumb_box = QRect(rect.left() + _PAD, rect.top() + _PAD, _THUMB.width(), _THUMB.height())
-        painter.fillRect(thumb_box, QColor("#1e1e1e"))
+        # Subtle letterbox behind the (aspect-fit) thumbnail; adapts light/dark.
+        painter.fillRect(thumb_box, secondary_surface())
         pix = index.data(_PIX_ROLE)
         if isinstance(pix, QPixmap) and not pix.isNull():
             x = thumb_box.left() + (thumb_box.width() - pix.width()) // 2
@@ -90,9 +98,9 @@ class _VideoItemDelegate(QStyledItemDelegate):
             name_color = option.palette.highlightedText().color()
             muted = name_color
         else:
-            # Light text for the forced-dark list background.
-            name_color = QColor("#dddddd")
-            muted = QColor("#888888")
+            # Palette-driven so text stays readable on both light and dark fields.
+            name_color = option.palette.color(QPalette.ColorRole.Text)
+            muted = option.palette.color(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text)
 
         font = painter.font()
         font.setBold(True)
@@ -141,10 +149,22 @@ class _DropListWidget(QListWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setAcceptDrops(True)
-        # Dark middle field to match the Crop tab canvas.
-        self.setStyleSheet("QListWidget { background-color: #1e1e1e; border: none; }")
         self.center_widget: QWidget | None = None
         self.bottom_widget: QWidget | None = None
+        self._apply_field_theme()
+        watch_app_palette(self, self._apply_field_theme)
+
+    def _apply_field_theme(self) -> None:
+        # The list is the main content field: GitHub's muted well colour with a
+        # crisp border, matching the Crop canvas and the bordered side panels.
+        # Skip when unchanged: setStyleSheet re-polishes the widget and re-emits
+        # PaletteChange, which would otherwise loop back through the watcher.
+        sheet = (
+            f"QListWidget {{ background-color: {primary_surface().name()}; "
+            f"border: 1px solid {border_color().name()}; border-radius: 6px; }}"
+        )
+        if sheet != self.styleSheet():
+            self.setStyleSheet(sheet)
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
@@ -207,7 +227,9 @@ class VideoList(QWidget):
         self._loader = MediaLoader(self)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        # Reserve the same header inset (top) and bottom margin as the other
+        # columns so the list box lines up with them top and bottom.
+        layout.setContentsMargins(0, PANEL_HEADER_HEIGHT, 0, PANEL_MARGIN)
         self._list = _DropListWidget(self)
         self._list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self._list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
@@ -226,9 +248,8 @@ class VideoList(QWidget):
 
         # Floating action buttons hovering over the list, bottom-centered.
         self._overlay = QFrame(self._list.viewport())
-        self._overlay.setStyleSheet(
-            "QFrame { background: rgba(40, 40, 40, 210); border-radius: 8px; }"
-        )
+        self._apply_overlay_theme()
+        watch_app_palette(self, self._apply_overlay_theme)
         ob = QHBoxLayout(self._overlay)
         ob.setContentsMargins(8, 6, 8, 6)
         ob.setSpacing(6)
@@ -338,6 +359,17 @@ class VideoList(QWidget):
             event.accept()
             return
         super().keyPressEvent(event)
+
+    def _apply_overlay_theme(self) -> None:
+        # The floating action pill is raised over the list field: a bordered card
+        # (white in light mode, a lifted shade in dark) so it stands clear.
+        c = secondary_surface()
+        sheet = (
+            f"QFrame {{ background: rgba({c.red()}, {c.green()}, {c.blue()}, 240); "
+            f"border: 1px solid {border_color().name()}; border-radius: 8px; }}"
+        )
+        if sheet != self._overlay.styleSheet():
+            self._overlay.setStyleSheet(sheet)
 
     # --- internals ----------------------------------------------------------
 

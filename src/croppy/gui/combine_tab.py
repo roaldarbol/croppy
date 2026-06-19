@@ -30,7 +30,12 @@ from PySide6.QtWidgets import (
 from croppy.ffmpeg.crop import unique_output_path
 from croppy.ffmpeg.probe import ProbeError, probe
 from croppy.gui.compression_panel import CompressionController, CompressionPanel
-from croppy.gui.constants import SIDEBAR_DESCRIPTION_HEIGHT
+from croppy.gui.constants import (
+    PANEL_HEADER_HEIGHT,
+    PANEL_MARGIN,
+    SIDEBAR_DESCRIPTION_HEIGHT,
+    panel_header,
+)
 from croppy.gui.output_picker import OutputFolderPicker
 from croppy.gui.status_flash import StatusFlash, queued_message
 from croppy.gui.video_list import VideoList
@@ -81,8 +86,9 @@ class CombineTab(QWidget):
         # --- left: the groups list (rename inline like a file explorer) ---
         groups_panel = QWidget(splitter)
         gp = QVBoxLayout(groups_panel)
-        gp.setContentsMargins(8, 8, 8, 8)
-        gp.addWidget(QLabel("<b>Groups</b>"))
+        gp.setContentsMargins(PANEL_MARGIN, 0, PANEL_MARGIN, PANEL_MARGIN)
+        gp.setSpacing(0)
+        gp.addWidget(panel_header("<b>Groups</b>"))
         self.groups_list = QListWidget()
         self.groups_list.setEditTriggers(
             QAbstractItemView.EditTrigger.DoubleClicked
@@ -92,7 +98,9 @@ class CombineTab(QWidget):
         self.groups_list.currentRowChanged.connect(self._on_group_selected)
         self.groups_list.itemChanged.connect(self._on_group_renamed)
         gp.addWidget(self.groups_list, 1)
+        gp.addSpacing(PANEL_MARGIN)
         gb = QHBoxLayout()
+        gb.setSpacing(PANEL_MARGIN)
         self.new_group_btn = QPushButton("New group")
         self.new_group_btn.clicked.connect(lambda: self._add_group(select=True))
         self.del_group_btn = QPushButton("Delete")
@@ -109,7 +117,7 @@ class CombineTab(QWidget):
         self._side = side
         side.setMinimumWidth(280)
         v = QVBoxLayout(side)
-        v.setContentsMargins(8, 8, 8, 8)
+        v.setContentsMargins(PANEL_MARGIN, PANEL_HEADER_HEIGHT, PANEL_MARGIN, PANEL_MARGIN)
         v.setSpacing(12)
         hint = QLabel(
             "Each group is one join. Add two or more videos and drag to set the "
