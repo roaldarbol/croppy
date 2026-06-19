@@ -33,3 +33,17 @@ def test_probe_non_video_raises(tmp_path: Path) -> None:
     bogus.write_text("definitely not a video")
     with pytest.raises(ProbeError):
         probe(bogus)
+
+
+def test_probe_timeout_raises_probe_error(monkeypatch, tmp_path: Path) -> None:
+    import subprocess
+
+    f = tmp_path / "clip.mp4"
+    f.write_bytes(b"x")  # exists so the is_file() guard passes
+
+    def _timeout(*_a, **_k):
+        raise subprocess.TimeoutExpired(cmd="ffprobe", timeout=60)
+
+    monkeypatch.setattr(subprocess, "run", _timeout)
+    with pytest.raises(ProbeError, match="timed out"):
+        probe(f)

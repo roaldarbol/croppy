@@ -69,6 +69,12 @@ class MediaLoader(QObject):
         for loader in list(cls._instances):
             try:
                 if isValid(loader):
+                    # Drop tasks that haven't started so they can't kick off new
+                    # work, then wait out the ones already running. (A QThreadPool
+                    # destructor waits with no timeout, so a task left running at
+                    # shutdown would block the process forever — see the bounded
+                    # subprocess timeouts in croppy.ffmpeg.probe / .frame.)
+                    loader._pool.clear()
                     loader._pool.waitForDone(timeout_ms)
             except RuntimeError:
                 # The C++ object was already deleted — nothing left to wait for.

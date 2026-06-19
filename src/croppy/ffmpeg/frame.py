@@ -15,6 +15,12 @@ class FrameExtractError(RuntimeError):
     """Raised when frame extraction fails."""
 
 
+# Bound the decode so a stuck ffmpeg can never hang the background loader thread
+# forever. Generous: index-based extraction of an early frame decodes from the
+# start, but even that is far under this on any sane clip.
+_FRAME_TIMEOUT_S = 300
+
+
 def extract_frame(
     video_path: Path | str, frame_number: int = 1, fps: float | None = None
 ) -> QImage:
@@ -76,7 +82,12 @@ def extract_frame(
         ]
     logger.debug("extract_frame: {}", " ".join(cmd))
 
-    result = subprocess.run(cmd, capture_output=True, check=False)
+    try:
+        result = subprocess.run(cmd, capture_output=True, check=False, timeout=_FRAME_TIMEOUT_S)
+    except subprocess.TimeoutExpired as exc:
+        raise FrameExtractError(
+            f"ffmpeg timed out after {_FRAME_TIMEOUT_S}s extracting frame {frame_number}"
+        ) from exc
 
     if result.returncode != 0:
         stderr = result.stderr.decode("utf-8", errors="replace").strip()

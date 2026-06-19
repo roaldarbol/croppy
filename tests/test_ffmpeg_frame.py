@@ -47,6 +47,20 @@ def test_extract_frame_zero_raises(qapp, test_video: Path) -> None:
         extract_frame(test_video, frame_number=0)
 
 
+def test_extract_frame_timeout_raises(qapp, monkeypatch, tmp_path: Path) -> None:
+    import subprocess
+
+    f = tmp_path / "clip.mp4"
+    f.write_bytes(b"x")  # exists so the is_file() guard passes
+
+    def _timeout(*_a, **_k):
+        raise subprocess.TimeoutExpired(cmd="ffmpeg", timeout=300)
+
+    monkeypatch.setattr(subprocess, "run", _timeout)
+    with pytest.raises(FrameExtractError, match="timed out"):
+        extract_frame(f, frame_number=1)
+
+
 def test_probe_with_first_frame(qapp, test_video: Path) -> None:
     from croppy.ffmpeg.preview import probe_with_first_frame
 
