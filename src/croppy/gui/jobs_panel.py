@@ -149,9 +149,7 @@ class _JobGroup(QWidget):
         v.setSpacing(2)
 
         self._header = QLabel(title)
-        self._header.setStyleSheet(
-            "color: #aaa; font-weight: bold; padding: 8px 2px 2px 2px;"
-        )
+        self._header.setStyleSheet("color: #aaa; font-weight: bold; padding: 8px 2px 2px 2px;")
         v.addWidget(self._header)
 
         self._body = QWidget()

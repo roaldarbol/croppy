@@ -168,7 +168,8 @@ class CompressTab(QWidget):
             return
         for row in self.video_list.selected_rows():
             self.video_list.set_item_data(
-                row, _ItemConfig(settings, self._item_config(row).output_dir),
+                row,
+                _ItemConfig(settings, self._item_config(row).output_dir),
                 summarize_settings(settings),
             )
 

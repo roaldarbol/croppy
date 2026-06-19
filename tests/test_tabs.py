@@ -233,9 +233,7 @@ def test_compress_panel_follows_selection(qtbot, qapp, test_video: Path, tmp_pat
     assert tab.compression.settings().cq == base + 7
 
 
-def test_compress_output_folder_is_per_item(
-    qtbot, qapp, test_video: Path, tmp_path: Path
-) -> None:
+def test_compress_output_folder_is_per_item(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
     queue = MagicMock()
     queue.jobs.return_value = []
     tab = CompressTab(CompressionController(), queue)

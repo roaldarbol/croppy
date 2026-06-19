@@ -7,8 +7,6 @@ Empty-area click-drag creates a new crop; clicking on a crop selects it
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QBrush, QColor, QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
