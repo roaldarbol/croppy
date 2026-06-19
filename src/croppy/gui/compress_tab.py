@@ -31,7 +31,7 @@ from croppy.gui.compression_panel import (
     CompressionPanel,
     summarize_settings,
 )
-from croppy.gui.constants import SIDEBAR_DESCRIPTION_HEIGHT
+from croppy.gui.constants import PANEL_HEADER_HEIGHT, PANEL_MARGIN, SIDEBAR_DESCRIPTION_HEIGHT
 from croppy.gui.output_picker import OutputFolderPicker
 from croppy.gui.status_flash import StatusFlash, queued_message
 from croppy.gui.video_list import VideoList
@@ -71,7 +71,9 @@ class CompressTab(QWidget):
         self._loading = False  # guard panel/picker → item → panel feedback
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        # Left inset so the video list (the leftmost column here, with no titled
+        # panel beside it) doesn't sit flush against the window edge.
+        layout.setContentsMargins(PANEL_MARGIN, 0, 0, 0)
         splitter = QSplitter(Qt.Orientation.Horizontal, self)
 
         self.video_list = VideoList(with_duplicate=True, parent=splitter)
@@ -83,7 +85,7 @@ class CompressTab(QWidget):
         side = QWidget(splitter)
         side.setMinimumWidth(280)
         v = QVBoxLayout(side)
-        v.setContentsMargins(8, 8, 8, 8)
+        v.setContentsMargins(PANEL_MARGIN, PANEL_HEADER_HEIGHT, PANEL_MARGIN, PANEL_MARGIN)
         v.setSpacing(12)
 
         hint = QLabel(

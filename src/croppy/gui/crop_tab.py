@@ -16,7 +16,6 @@ from PySide6.QtCore import QRectF, Qt, Signal
 from PySide6.QtGui import QImage
 from PySide6.QtWidgets import (
     QHBoxLayout,
-    QLabel,
     QListWidget,
     QMessageBox,
     QPushButton,
@@ -31,6 +30,7 @@ from croppy.ffmpeg.frame import extract_frame
 from croppy.ffmpeg.preview import probe_with_first_frame
 from croppy.ffmpeg.probe import VideoInfo, probe
 from croppy.gui.compression_panel import CompressionController
+from croppy.gui.constants import PANEL_MARGIN, panel_header
 from croppy.gui.editor import EditorWidget
 from croppy.gui.media_loader import MediaLoader
 from croppy.jobs.job import CropJob
@@ -68,18 +68,24 @@ class CropTab(QWidget):
         # --- left: open-videos list ---
         left = QWidget(splitter)
         lv = QVBoxLayout(left)
-        lv.setContentsMargins(8, 8, 8, 8)
-        lv.addWidget(QLabel("<b>Videos</b>"))
+        # Top margin 0: the header reserves the top inset so the list box lines up
+        # with the canvas and sidebar in the columns to its right.
+        lv.setContentsMargins(PANEL_MARGIN, 0, PANEL_MARGIN, PANEL_MARGIN)
+        lv.setSpacing(0)
+        lv.addWidget(panel_header("<b>Videos</b>"))
         self.videos_list = QListWidget()
         self.videos_list.currentRowChanged.connect(self._on_selected)
         lv.addWidget(self.videos_list, 1)
+        lv.addSpacing(PANEL_MARGIN)
         # Two rows so the panel's minimum width stays narrow (three buttons in a
         # single row would force it much wider than the Combine tab's left panel).
         lb = QVBoxLayout()
+        lb.setSpacing(PANEL_MARGIN)
         self.add_btn = QPushButton("Add video…")
         self.add_btn.clicked.connect(self._browse_video)
         lb.addWidget(self.add_btn)
         edit_row = QHBoxLayout()
+        edit_row.setSpacing(PANEL_MARGIN)
         self.duplicate_btn = QPushButton("Duplicate")
         self.duplicate_btn.clicked.connect(self._duplicate_current)
         self.duplicate_btn.setEnabled(False)

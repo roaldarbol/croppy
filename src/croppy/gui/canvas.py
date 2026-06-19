@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 from croppy.gui.crop_item import CropRectItem
 from croppy.gui.drop_hint import DropHint
 from croppy.gui.landing import accepted_videos, first_accepted
+from croppy.gui.theme import primary_surface, watch_app_palette
 
 _DRAFT_MIN_SIDE = 6.0
 _DRAFT_BORDER = QColor("#ffaa00")
@@ -40,7 +41,8 @@ class VideoCanvas(QGraphicsView):
         # No view frame: the surrounding splitter already delimits the area, so
         # the default QGraphicsView border would read as a doubled outline.
         self.setFrameShape(QFrame.Shape.NoFrame)
-        self.setBackgroundBrush(QBrush(QColor("#1e1e1e")))
+        self._apply_background()
+        watch_app_palette(self, self._apply_background)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setRenderHints(
@@ -209,6 +211,9 @@ class VideoCanvas(QGraphicsView):
         super().keyPressEvent(event)
 
     # --- internals ----------------------------------------------------------
+
+    def _apply_background(self) -> None:
+        self.setBackgroundBrush(QBrush(primary_surface()))
 
     def _fit(self) -> None:
         if self._pixmap_item is None:

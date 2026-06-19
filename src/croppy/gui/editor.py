@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
 from croppy.ffmpeg.probe import VideoInfo
 from croppy.gui.canvas import VideoCanvas
 from croppy.gui.compression_panel import CompressionController, CompressionPanel
-from croppy.gui.constants import SIDEBAR_DESCRIPTION_HEIGHT
+from croppy.gui.constants import PANEL_HEADER_HEIGHT, PANEL_MARGIN, SIDEBAR_DESCRIPTION_HEIGHT
 from croppy.gui.crop_item import CropRectItem
 from croppy.gui.landing import file_dialog_filter
 from croppy.gui.output_picker import OutputFolderPicker
@@ -135,8 +135,15 @@ class EditorWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         splitter = QSplitter(Qt.Orientation.Horizontal, self)
-        self.canvas = VideoCanvas(splitter)
-        splitter.addWidget(self.canvas)
+        # The canvas sits in a wrapper that reserves the same top inset as the
+        # other columns' headers (and a matching bottom margin), so the canvas
+        # lines up with the video list and sidebar boxes top and bottom.
+        self.canvas = VideoCanvas()
+        canvas_wrap = QWidget(splitter)
+        cw = QVBoxLayout(canvas_wrap)
+        cw.setContentsMargins(0, PANEL_HEADER_HEIGHT, 0, PANEL_MARGIN)
+        cw.addWidget(self.canvas)
+        splitter.addWidget(canvas_wrap)
         splitter.addWidget(self._build_sidebar(splitter))
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 0)
@@ -149,7 +156,9 @@ class EditorWidget(QWidget):
         self._sidebar = side
         side.setMinimumWidth(280)
         v = QVBoxLayout(side)
-        v.setContentsMargins(8, 8, 8, 8)
+        # Top inset matches the other columns' header height so the summary lines
+        # up with the video list box rather than the title above it.
+        v.setContentsMargins(PANEL_MARGIN, PANEL_HEADER_HEIGHT, PANEL_MARGIN, PANEL_MARGIN)
         v.setSpacing(12)
 
         self.summary = QLabel("No video loaded — drop one on the canvas or click to browse.")
