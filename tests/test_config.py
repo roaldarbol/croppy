@@ -31,6 +31,7 @@ def test_encode_settings_roundtrip() -> None:
         audio_mode="aac",
         audio_bitrate="256k",
         faststart=False,
+        preserve_created_time=False,
     )
     save_encode_settings(custom)
     assert load_encode_settings() == custom

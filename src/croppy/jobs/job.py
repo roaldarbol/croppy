@@ -23,6 +23,7 @@ from croppy.ffmpeg.combine import (
 from croppy.ffmpeg.compress import build_compress_command
 from croppy.ffmpeg.crop import build_crop_command
 from croppy.models import CropRegion, EncodeSettings
+from croppy.timestamps import read_created_time, set_created_time
 
 
 class JobState(StrEnum):
@@ -87,6 +88,25 @@ class Job(ABC):
         partial = self.partial_output
         if partial.exists():
             partial.replace(self.output_path)
+        self._apply_source_created_time()
+
+    def _apply_source_created_time(self) -> None:
+        """Stamp the output's creation date from the source, when applicable.
+
+        Best effort and Windows-only in practice — a no-op everywhere else, and
+        it never raises, so it can't fail an otherwise-successful job.
+        """
+        when = self._source_created_time()
+        if when is not None:
+            set_created_time(self.output_path, when)
+
+    def _source_created_time(self) -> float | None:
+        """Creation time (Unix seconds) to copy onto the output, or ``None``.
+
+        Base default leaves the output's date alone; subclasses that know their
+        source(s) override this, gated on ``settings.preserve_created_time``.
+        """
+        return None
 
     def on_cleanup(self) -> None:
         """Drop the incomplete ``.partial`` file after a failed/canceled run."""
@@ -109,6 +129,11 @@ class CropJob(Job):
     def build_command(self) -> list[str]:
         return build_crop_command(self.input_path, self.partial_output, self.region, self.settings)
 
+    def _source_created_time(self) -> float | None:
+        if not self.settings.preserve_created_time:
+            return None
+        return read_created_time(self.input_path)
+
 
 @dataclass(kw_only=True)
 class CompressJob(Job):
@@ -118,6 +143,11 @@ class CompressJob(Job):
 
     def build_command(self) -> list[str]:
         return build_compress_command(self.input_path, self.partial_output, self.settings)
+
+    def _source_created_time(self) -> float | None:
+        if not self.settings.preserve_created_time:
+            return None
+        return read_created_time(self.input_path)
 
 
 @dataclass(kw_only=True)
@@ -156,6 +186,13 @@ class CombineJob(Job):
             self.partial_output.replace(self.output_path)
         self.partial_output.unlink(missing_ok=True)
         self._remove_list()
+        self._apply_source_created_time()
+
+    def _source_created_time(self) -> float | None:
+        # Use the first clip's creation date (as the default output name does).
+        if not self.settings.preserve_created_time:
+            return None
+        return read_created_time(self.inputs[0]) if self.inputs else None
 
     def on_cleanup(self) -> None:
         # Keep the fragmented .partial.mp4 (playable up to where it stopped);

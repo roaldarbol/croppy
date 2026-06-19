@@ -213,6 +213,16 @@ class SettingsPanel(QWidget):
             "downloaded. Useful for mp4/mov shared online.",
         )
 
+        self.preserve_ctime_check = QCheckBox("Copy the source's creation date (Windows)")
+        add_row(
+            "Creation date:",
+            self.preserve_ctime_check,
+            "Give the output the same 'Date created' as the original clip, so it\n"
+            "reflects when the footage was recorded rather than when it was\n"
+            "encoded. 'Date modified' still shows when croppy wrote the file.\n"
+            "Only takes effect on Windows. (Combine uses the first clip's date.)",
+        )
+
         # Give every input the same width so the column lines up tidily.
         for field in (
             self.container_combo,
@@ -245,6 +255,7 @@ class SettingsPanel(QWidget):
         self.audio_combo.currentTextChanged.connect(self._on_audio_changed)
         self.audio_bitrate_combo.currentTextChanged.connect(self._emit)
         self.faststart_check.toggled.connect(self._emit)
+        self.preserve_ctime_check.toggled.connect(self._emit)
 
     # --- public API ---------------------------------------------------------
 
@@ -261,6 +272,7 @@ class SettingsPanel(QWidget):
             audio_mode=self.audio_combo.currentText(),
             audio_bitrate=self.audio_bitrate_combo.currentText(),
             faststart=self.faststart_check.isChecked(),
+            preserve_created_time=self.preserve_ctime_check.isChecked(),
         )
 
     def set_settings(self, settings: EncodeSettings) -> None:
@@ -286,6 +298,7 @@ class SettingsPanel(QWidget):
             if settings.audio_bitrate in AUDIO_BITRATES:
                 self.audio_bitrate_combo.setCurrentText(settings.audio_bitrate)
             self.faststart_check.setChecked(settings.faststart)
+            self.preserve_ctime_check.setChecked(settings.preserve_created_time)
         finally:
             self._loading = False
         self._update_dependent_enabled()

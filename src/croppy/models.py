@@ -75,3 +75,8 @@ class EncodeSettings:
     audio_mode: str = "copy"  # "copy" or "aac"
     audio_bitrate: str = "192k"
     faststart: bool = True  # only honored for mp4/mov containers
+    # Stamp the output's creation date from the source clip, so a cropped/
+    # compressed/combined file keeps the *original* recording's "Date created"
+    # while its "Date modified" reflects when croppy wrote it. Windows-only in
+    # practice (see croppy.timestamps); a no-op elsewhere.
+    preserve_created_time: bool = True

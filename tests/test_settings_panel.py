@@ -138,6 +138,15 @@ def test_faststart_disabled_for_mkv(qtbot, qapp) -> None:
     assert panel.faststart_check.isEnabled()
 
 
+def test_preserve_created_time_round_trip(qtbot, qapp) -> None:
+    panel = SettingsPanel()
+    qtbot.addWidget(panel)
+    assert panel.settings().preserve_created_time is True  # default on
+    panel.set_settings(EncodeSettings(preserve_created_time=False))
+    assert panel.preserve_ctime_check.isChecked() is False
+    assert panel.settings().preserve_created_time is False
+
+
 def test_settings_panel_tune_round_trip(qtbot, qapp) -> None:
     panel = SettingsPanel()
     qtbot.addWidget(panel)
