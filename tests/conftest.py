@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import faulthandler
+import gc
 import os
 import subprocess
 from pathlib import Path
@@ -14,14 +15,24 @@ from croppy.ffmpeg.binary import find_ffmpeg
 
 
 def pytest_configure(config: pytest.Config) -> None:
-    """Arm a deadlock watchdog when ``CROPPY_TEST_WATCHDOG_SECS`` is set.
+    """Arm a deadlock watchdog and stop automatic GC during the test session.
 
-    The suite has hung at *shutdown* on CI (a background thread-pool task
-    outliving the tests can block the pool's no-timeout destructor forever). If
-    the process is still alive this many seconds after start, dump every thread's
-    stack to stderr and hard-exit — turning a multi-hour CI hang into a fast,
-    diagnosable failure. Off by default so local runs are unaffected.
+    **Watchdog** (when ``CROPPY_TEST_WATCHDOG_SECS`` is set): the suite has hung
+    at *shutdown* on CI (a background thread-pool task outliving the tests can
+    block the pool's no-timeout destructor forever). If the process is still
+    alive this many seconds after start, dump every thread's stack and hard-exit
+    — turning a multi-hour hang into a fast, diagnosable failure. Off by default
+    so local runs are unaffected.
+
+    **GC**: a widget test can leave MediaLoader work running (it forks ffmpeg via
+    a thread pool) into pytest-qt's ``_process_events`` at the end of the *call*
+    phase — before any fixture teardown can drain it. If the automatic cyclic
+    collector fires there, it frees Qt objects on the main thread while those
+    background threads run → segfault (seen on Linux/macOS CI). We disable the
+    automatic collector for the whole session and instead collect explicitly in
+    ``_drain_media_loaders``, once background work has been drained and it's safe.
     """
+    gc.disable()
     secs = os.environ.get("CROPPY_TEST_WATCHDOG_SECS")
     if secs and int(secs) > 0:
         faulthandler.enable()
@@ -58,6 +69,9 @@ def _drain_media_loaders():
     app = QCoreApplication.instance()
     if app is not None:
         app.processEvents()  # deliver any pending result callbacks while widgets live
+    # Safe point to reclaim cycles: background work is drained, so no thread is
+    # live to race the collector (automatic GC is off — see pytest_configure).
+    gc.collect()
 
 
 @pytest.fixture(scope="session")
