@@ -31,6 +31,7 @@ from croppy.gui.constants import SIDEBAR_DESCRIPTION_HEIGHT
 from croppy.gui.crop_item import CropRectItem
 from croppy.gui.landing import file_dialog_filter
 from croppy.gui.output_picker import OutputFolderPicker
+from croppy.gui.status_flash import StatusFlash, queued_message
 from croppy.models import CropRegion, EncodeSettings
 
 
@@ -200,7 +201,14 @@ class EditorWidget(QWidget):
         self.process_btn.clicked.connect(self.process_requested)
         v.addWidget(self.process_btn)
 
+        self.queued_flash = StatusFlash()
+        v.addWidget(self.queued_flash)
+
         return side
+
+    def confirm_queued(self, count: int) -> None:
+        """Show transient feedback that ``count`` jobs were added to the queue."""
+        self.queued_flash.flash(queued_message(count))
 
     # --- signal handlers ----------------------------------------------------
 

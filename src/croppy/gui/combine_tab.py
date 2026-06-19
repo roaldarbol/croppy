@@ -32,6 +32,7 @@ from croppy.ffmpeg.probe import ProbeError, probe
 from croppy.gui.compression_panel import CompressionController, CompressionPanel
 from croppy.gui.constants import SIDEBAR_DESCRIPTION_HEIGHT
 from croppy.gui.output_picker import OutputFolderPicker
+from croppy.gui.status_flash import StatusFlash, queued_message
 from croppy.gui.video_list import VideoList
 from croppy.jobs.job import CombineJob
 from croppy.jobs.queue import JobQueue
@@ -137,6 +138,9 @@ class CombineTab(QWidget):
         self.queue_btn.setEnabled(False)
         self.queue_btn.clicked.connect(self._queue_current)
         v.addWidget(self.queue_btn)
+
+        self.queued_flash = StatusFlash()
+        v.addWidget(self.queued_flash)
 
         splitter.addWidget(groups_panel)
         splitter.addWidget(self.stack)
@@ -283,4 +287,5 @@ class CombineTab(QWidget):
             settings=group.settings,
         )
         self._queue.submit(job)
+        self.queued_flash.flash(queued_message(1))
         # The group is kept so it can be tweaked and re-queued.

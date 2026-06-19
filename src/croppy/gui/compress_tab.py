@@ -33,6 +33,7 @@ from croppy.gui.compression_panel import (
 )
 from croppy.gui.constants import SIDEBAR_DESCRIPTION_HEIGHT
 from croppy.gui.output_picker import OutputFolderPicker
+from croppy.gui.status_flash import StatusFlash, queued_message
 from croppy.gui.video_list import VideoList
 from croppy.jobs.job import CompressJob
 from croppy.jobs.queue import JobQueue
@@ -118,6 +119,9 @@ class CompressTab(QWidget):
         self.queue_btn.setEnabled(False)
         self.queue_btn.clicked.connect(self._queue_jobs)
         v.addWidget(self.queue_btn)
+
+        self.queued_flash = StatusFlash()
+        v.addWidget(self.queued_flash)
 
         splitter.addWidget(side)
         splitter.setStretchFactor(0, 1)
@@ -208,5 +212,6 @@ class CompressTab(QWidget):
                 settings=cfg.settings,
             )
             self._queue.submit(job)
+        self.queued_flash.flash(queued_message(len(rows)))
         # The list is kept so you can tweak compression and queue again to
         # compare variants.

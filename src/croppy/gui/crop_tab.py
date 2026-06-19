@@ -294,3 +294,4 @@ class CropTab(QWidget):
                 settings=settings,
             )
             self._queue.submit(job)
+        editor.confirm_queued(len(regions))
