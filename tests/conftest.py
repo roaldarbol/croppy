@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import faulthandler
+import os
 import subprocess
 from pathlib import Path
 
@@ -9,6 +11,21 @@ import pytest
 from PySide6.QtCore import QCoreApplication, QSettings
 
 from croppy.ffmpeg.binary import find_ffmpeg
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Arm a deadlock watchdog when ``CROPPY_TEST_WATCHDOG_SECS`` is set.
+
+    The suite has hung at *shutdown* on CI (a background thread-pool task
+    outliving the tests can block the pool's no-timeout destructor forever). If
+    the process is still alive this many seconds after start, dump every thread's
+    stack to stderr and hard-exit — turning a multi-hour CI hang into a fast,
+    diagnosable failure. Off by default so local runs are unaffected.
+    """
+    secs = os.environ.get("CROPPY_TEST_WATCHDOG_SECS")
+    if secs and int(secs) > 0:
+        faulthandler.enable()
+        faulthandler.dump_traceback_later(int(secs), exit=True)
 
 
 @pytest.fixture(autouse=True)

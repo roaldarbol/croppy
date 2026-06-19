@@ -12,6 +12,9 @@ defaults:
 jobs:
   test:
     name: ${{ matrix.os }}
+    # Backstop in case the watchdog itself can't fire: never let a hung run tie
+    # up a runner for the 6-hour default.
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -33,4 +36,9 @@ jobs:
           # Run Qt headless so pytest-qt can construct widgets on CI runners
           # without an X server / display.
           QT_QPA_PLATFORM: offscreen
+          # Dump all thread stacks and fail fast if the run hasn't finished in
+          # this many seconds (the suite normally takes ~10s) — see
+          # conftest.pytest_configure. Surfaces a teardown deadlock instead of
+          # hanging the runner.
+          CROPPY_TEST_WATCHDOG_SECS: "180"
         run: pixi run -e dev test
