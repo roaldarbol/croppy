@@ -106,14 +106,17 @@ def test_load_new_video_keeps_output_dir(qtbot, qapp, test_video: Path, tmp_path
     assert editor.output_dir() == tmp_path  # output folder is carried over
 
 
-def test_canvas_drop_emits_video_dropped(qtbot, qapp, test_video: Path) -> None:
+def _dispatch_drop(canvas, paths) -> None:
+    """Build and dispatch a drop of ``paths`` onto ``canvas``.
+
+    The QMimeData must stay alive for the whole dropEvent call — QDropEvent only
+    borrows it — so we construct and dispatch within one scope.
+    """
     from PySide6.QtCore import QMimeData, QUrl
     from PySide6.QtGui import QDropEvent
 
-    canvas = VideoCanvas()
-    qtbot.addWidget(canvas)
     mime = QMimeData()
-    mime.setUrls([QUrl.fromLocalFile(str(test_video))])
+    mime.setUrls([QUrl.fromLocalFile(str(p)) for p in paths])
     event = QDropEvent(
         canvas.rect().center(),
         Qt.DropAction.CopyAction,
@@ -121,6 +124,26 @@ def test_canvas_drop_emits_video_dropped(qtbot, qapp, test_video: Path) -> None:
         Qt.MouseButton.LeftButton,
         Qt.KeyboardModifier.NoModifier,
     )
-    with qtbot.waitSignal(canvas.video_dropped, timeout=500) as blocker:
-        canvas.dropEvent(event)
-    assert blocker.args == [test_video]
+    canvas.dropEvent(event)
+
+
+def test_canvas_drop_emits_single_video_as_list(qtbot, qapp, test_video: Path) -> None:
+    canvas = VideoCanvas()
+    qtbot.addWidget(canvas)
+    with qtbot.waitSignal(canvas.videos_dropped, timeout=500) as blocker:
+        _dispatch_drop(canvas, [test_video])
+    assert blocker.args == [[test_video]]
+
+
+def test_canvas_drop_emits_all_videos(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
+    import shutil
+
+    a = tmp_path / "a.mp4"
+    b = tmp_path / "b.mp4"
+    shutil.copy(test_video, a)
+    shutil.copy(test_video, b)
+    canvas = VideoCanvas()
+    qtbot.addWidget(canvas)
+    with qtbot.waitSignal(canvas.videos_dropped, timeout=500) as blocker:
+        _dispatch_drop(canvas, [a, b])
+    assert blocker.args == [[a, b]]

@@ -36,7 +36,7 @@ from croppy.models import CropRegion, EncodeSettings
 
 class EditorWidget(QWidget):
     frame_change_requested = Signal(int)
-    video_change_requested = Signal(Path)
+    videos_change_requested = Signal(list)  # videos to open (list[Path])
     process_requested = Signal()
 
     def __init__(
@@ -55,8 +55,8 @@ class EditorWidget(QWidget):
 
         self.canvas.crops_changed.connect(self._refresh_crops)
         self.canvas.selection_changed.connect(self._on_canvas_selection)
-        self.canvas.video_dropped.connect(self.video_change_requested)
-        self.canvas.browse_requested.connect(self._browse_input_video)
+        self.canvas.videos_dropped.connect(self.videos_change_requested)
+        self.canvas.browse_requested.connect(self._browse_input_videos)
         self.crops_list.itemSelectionChanged.connect(self._on_list_selection)
 
         if info is not None and image is not None:
@@ -250,13 +250,15 @@ class EditorWidget(QWidget):
         finally:
             self._syncing_selection = False
 
-    def _browse_input_video(self) -> None:
+    def _browse_input_videos(self) -> None:
         start_dir = str(self._info.path.parent) if self._info is not None else ""
-        path_str, _ = QFileDialog.getOpenFileName(
+        path_strs, _ = QFileDialog.getOpenFileNames(
             self,
-            "Choose input video",
+            "Choose input video(s)",
             start_dir,
             file_dialog_filter(),
         )
-        if path_str:
-            self.video_change_requested.emit(Path(path_str))
+        # The Crop tab opens each as its own list entry (first one shown).
+        paths = [Path(p) for p in path_strs]
+        if paths:
+            self.videos_change_requested.emit(paths)

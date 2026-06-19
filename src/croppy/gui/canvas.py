@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
 
 from croppy.gui.crop_item import CropRectItem
 from croppy.gui.drop_hint import DropHint
-from croppy.gui.landing import first_accepted
+from croppy.gui.landing import accepted_videos, first_accepted
 
 _DRAFT_MIN_SIDE = 6.0
 _DRAFT_BORDER = QColor("#ffaa00")
@@ -32,7 +32,7 @@ _DRAFT_BORDER = QColor("#ffaa00")
 class VideoCanvas(QGraphicsView):
     crops_changed = Signal()
     selection_changed = Signal(object)  # CropRectItem | None
-    video_dropped = Signal(Path)  # a video file was dropped / chosen here
+    videos_dropped = Signal(list)  # video files (list[Path]) dropped / chosen here
     browse_requested = Signal()  # empty canvas clicked
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -171,12 +171,12 @@ class VideoCanvas(QGraphicsView):
             event.ignore()
 
     def dropEvent(self, event) -> None:
-        path = first_accepted(event.mimeData().urls())
-        if path is None:
+        paths = accepted_videos(event.mimeData().urls())
+        if not paths:
             event.ignore()
             return
         event.acceptProposedAction()
-        self.video_dropped.emit(path)
+        self.videos_dropped.emit(paths)
 
     def mouseMoveEvent(self, event) -> None:
         if self._draft is not None and self._draft_origin is not None:

@@ -94,7 +94,7 @@ class CropTab(QWidget):
         # --- center: an editor per open video, plus an empty placeholder ---
         self.stack = QStackedWidget(splitter)
         self._placeholder = EditorWidget(controller=controller)
-        self._placeholder.video_change_requested.connect(self.open_video)
+        self._placeholder.videos_change_requested.connect(self.open_videos)
         self.stack.addWidget(self._placeholder)
 
         splitter.addWidget(left)
@@ -107,6 +107,16 @@ class CropTab(QWidget):
         layout.addWidget(splitter)
 
     # --- public API ---------------------------------------------------------
+
+    def open_videos(self, paths: list[Path]) -> None:
+        """Open several videos as list entries, keeping the first one selected."""
+        if not paths:
+            return
+        first_row = len(self._videos)
+        for path in paths:
+            self.open_video(path)
+        if first_row < len(self._videos):
+            self.videos_list.setCurrentRow(first_row)
 
     def open_video(self, path: Path) -> None:
         logger.info("Crop: opening {}", path)
@@ -139,7 +149,7 @@ class CropTab(QWidget):
     def _register_editor(self, path: Path, editor: EditorWidget, at: int | None = None) -> None:
         editor.process_requested.connect(lambda e=editor: self._queue_editor(e))
         editor.frame_change_requested.connect(lambda n, e=editor: self._reload(e, n))
-        editor.video_change_requested.connect(self.open_video)  # drop another → open it
+        editor.videos_change_requested.connect(self.open_videos)  # drop more → open them
         self.stack.addWidget(editor)
         if at is None:
             at = len(self._videos)
@@ -148,8 +158,9 @@ class CropTab(QWidget):
         self.videos_list.setCurrentRow(at)
 
     def _browse_video(self) -> None:
-        # Reuse the placeholder editor's file dialog (covers the empty state too).
-        self._placeholder._browse_input_video()
+        # Reuse the placeholder editor's file dialog (covers the empty state too);
+        # it allows selecting several videos, each opened as its own list entry.
+        self._placeholder._browse_input_videos()
 
     def _duplicate_current(self) -> None:
         row = self.videos_list.currentRow()

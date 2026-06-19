@@ -171,12 +171,19 @@ class LandingWidget(QWidget):
         super().changeEvent(event)
 
 
-def first_accepted(urls: Iterable) -> Path | None:
-    """Return the first URL that is a local existing video file, else ``None``."""
+def accepted_videos(urls: Iterable) -> list[Path]:
+    """Return every URL that is a local existing video file, in order."""
+    paths: list[Path] = []
     for url in urls:
         if not url.isLocalFile():
             continue
         path = Path(url.toLocalFile())
         if is_accepted_video(path):
-            return path
-    return None
+            paths.append(path)
+    return paths
+
+
+def first_accepted(urls: Iterable) -> Path | None:
+    """Return the first URL that is a local existing video file, else ``None``."""
+    paths = accepted_videos(urls)
+    return paths[0] if paths else None

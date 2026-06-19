@@ -36,6 +36,22 @@ def test_opens_multiple_videos(qtbot, qapp, test_video: Path, tmp_path: Path) ->
     assert tab.current_editor() is tab._videos[1].editor
 
 
+def test_open_videos_lists_all_and_selects_first(
+    qtbot, qapp, test_video: Path, tmp_path: Path
+) -> None:
+    tab = CropTab(CompressionController(), MagicMock())
+    qtbot.addWidget(tab)
+    # Stub the async frame load: list insertion + selection are synchronous, so
+    # this exercises open_videos' behaviour without spawning loader threads.
+    tab._loader.submit = lambda work, done, failed: None
+    paths = [_copy(test_video, tmp_path / f"{name}.mp4") for name in ("a", "b", "c")]
+    tab.open_videos(paths)
+    assert tab.videos_list.count() == 3
+    # All listed, but the first video is the one shown/selected.
+    assert tab.videos_list.currentRow() == 0
+    assert [v.path for v in tab._videos] == paths
+
+
 def test_per_video_crops_are_isolated(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
     tab = CropTab(CompressionController(), MagicMock())
     qtbot.addWidget(tab)
