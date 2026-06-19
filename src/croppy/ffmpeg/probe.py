@@ -18,6 +18,12 @@ class ProbeError(RuntimeError):
     """Raised when ffprobe fails or returns unusable data."""
 
 
+# ffprobe is near-instant in practice; cap it so a stuck call can never hang a
+# background loader thread forever (which would otherwise block the thread pool's
+# destructor at shutdown indefinitely).
+_PROBE_TIMEOUT_S = 60
+
+
 @dataclass(frozen=True)
 class VideoInfo:
     path: Path
@@ -59,11 +65,19 @@ def probe(path: Path | str) -> VideoInfo:
             capture_output=True,
             text=True,
             check=True,
+            timeout=_PROBE_TIMEOUT_S,
         )
+    except subprocess.TimeoutExpired as exc:
+        raise ProbeError(f"ffprobe timed out after {_PROBE_TIMEOUT_S}s for {video_path}") from exc
     except subprocess.CalledProcessError as exc:
         raise ProbeError(f"ffprobe failed: {exc.stderr.strip()}") from exc
 
-    data = json.loads(result.stdout)
+    try:
+        data = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        # ffprobe occasionally returns empty/partial output under heavy load;
+        # surface it as a clean ProbeError instead of crashing the caller.
+        raise ProbeError(f"ffprobe returned unreadable output for {video_path}: {exc}") from exc
     streams = data.get("streams") or []
     if not streams:
         raise ProbeError(f"No video stream found in {video_path}")

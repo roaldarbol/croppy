@@ -5,15 +5,14 @@ from __future__ import annotations
 from loguru import logger
 from PySide6.QtCore import QObject, QProcess, Signal
 
-from croppy.ffmpeg.crop import build_crop_command
-from croppy.jobs.job import CropJob, JobState
+from croppy.jobs.job import Job, JobState
 
 _PROGRESS_KEY = b"out_time_us="
 _KILL_GRACE_MS = 2000
 
 
 class Worker(QObject):
-    """Runs ``ffmpeg`` for a single :class:`CropJob` and emits signals.
+    """Runs ``ffmpeg`` for a single :class:`Job` and emits signals.
 
     Lifecycle: :meth:`start` launches the process; :meth:`cancel` terminates it.
     Exactly one of ``finished``, ``failed``, or ``canceled`` is emitted.
@@ -24,7 +23,7 @@ class Worker(QObject):
     failed = Signal(int, str)  # job_id, message
     canceled = Signal(int)  # job_id
 
-    def __init__(self, job: CropJob, parent: QObject | None = None) -> None:
+    def __init__(self, job: Job, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._job = job
         self._proc = QProcess(self)
@@ -33,18 +32,14 @@ class Worker(QObject):
         self._proc.finished.connect(self._on_finished)
         self._stderr_buf = bytearray()
         self._canceled = False
+        self._finalizing = False
 
     @property
-    def job(self) -> CropJob:
+    def job(self) -> Job:
         return self._job
 
     def start(self) -> None:
-        cmd = build_crop_command(
-            self._job.input_path,
-            self._job.output_path,
-            self._job.region,
-            self._job.settings,
-        )
+        cmd = self._job.build_command()
         logger.debug("Worker[{}] launching: {}", self._job.id, " ".join(cmd))
         self._job.state = JobState.RUNNING
         self._proc.start(cmd[0], cmd[1:])
@@ -80,15 +75,42 @@ class Worker(QObject):
 
     def _on_finished(self, code: int, exit_status: QProcess.ExitStatus) -> None:
         if self._canceled:
+            self._safe_cleanup()
             self._job.state = JobState.CANCELED
             self.canceled.emit(self._job.id)
             return
         if code == 0 and exit_status == QProcess.ExitStatus.NormalExit:
+            if not self._finalizing:
+                finalize = self._job.finalize_command()
+                if finalize is not None:
+                    # Encode done; run the finalize pass (e.g. fragmented → indexed)
+                    # as a second process so the GUI thread never blocks on it.
+                    self._finalizing = True
+                    self._stderr_buf.clear()
+                    logger.debug("Worker[{}] finalizing: {}", self._job.id, " ".join(finalize))
+                    self._proc.start(finalize[0], finalize[1:])
+                    return
+            try:
+                self._job.on_success()
+            except OSError as exc:
+                # e.g. a combine job could not rename its .partial.mp4.
+                self._safe_cleanup()
+                self._job.state = JobState.FAILED
+                self._job.error = str(exc)
+                self.failed.emit(self._job.id, str(exc))
+                return
             self._job.state = JobState.DONE
             self.finished.emit(self._job.id)
             return
         stderr = self._stderr_buf.decode("utf-8", errors="replace").strip()
         message = stderr or f"ffmpeg exited with code {code}"
+        self._safe_cleanup()
         self._job.state = JobState.FAILED
         self._job.error = message
         self.failed.emit(self._job.id, message)
+
+    def _safe_cleanup(self) -> None:
+        try:
+            self._job.on_cleanup()
+        except OSError as exc:
+            logger.warning("Worker[{}] cleanup failed: {}", self._job.id, exc)

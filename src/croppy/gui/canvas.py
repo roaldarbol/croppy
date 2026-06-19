@@ -10,6 +10,7 @@ from __future__ import annotations
 from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QBrush, QColor, QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
+    QFrame,
     QGraphicsItem,
     QGraphicsPixmapItem,
     QGraphicsRectItem,
@@ -19,6 +20,8 @@ from PySide6.QtWidgets import (
 )
 
 from croppy.gui.crop_item import CropRectItem
+from croppy.gui.drop_hint import DropHint
+from croppy.gui.landing import accepted_videos, first_accepted
 
 _DRAFT_MIN_SIDE = 6.0
 _DRAFT_BORDER = QColor("#ffaa00")
@@ -27,11 +30,16 @@ _DRAFT_BORDER = QColor("#ffaa00")
 class VideoCanvas(QGraphicsView):
     crops_changed = Signal()
     selection_changed = Signal(object)  # CropRectItem | None
+    videos_dropped = Signal(list)  # video files (list[Path]) dropped / chosen here
+    browse_requested = Signal()  # empty canvas clicked
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._scene = QGraphicsScene(self)
         self.setScene(self._scene)
+        # No view frame: the surrounding splitter already delimits the area, so
+        # the default QGraphicsView border would read as a doubled outline.
+        self.setFrameShape(QFrame.Shape.NoFrame)
         self.setBackgroundBrush(QBrush(QColor("#1e1e1e")))
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -40,15 +48,23 @@ class VideoCanvas(QGraphicsView):
         )
         self.setMinimumSize(400, 300)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setAcceptDrops(True)
 
         self._pixmap_item: QGraphicsPixmapItem | None = None
         self._crops: list[CropRectItem] = []
         self._draft: QGraphicsRectItem | None = None
         self._draft_origin: QPointF | None = None
 
+        # Centered logo + prompt shown until a video is loaded.
+        self._placeholder = DropHint("Drop a video here\nor click to browse", self.viewport())
+        self._position_overlays()
+
         self._scene.selectionChanged.connect(self._emit_selection)
 
     # --- public API ---------------------------------------------------------
+
+    def has_image(self) -> bool:
+        return self._pixmap_item is not None
 
     def set_image(self, image: QImage) -> None:
         pixmap = QPixmap.fromImage(image)
@@ -58,6 +74,8 @@ class VideoCanvas(QGraphicsView):
         else:
             self._pixmap_item.setPixmap(pixmap)
         self._scene.setSceneRect(QRectF(0, 0, image.width(), image.height()))
+        self._placeholder.hide()
+        self._position_overlays()
         self._fit()
 
     def image_size(self) -> tuple[int, int]:
@@ -80,6 +98,15 @@ class VideoCanvas(QGraphicsView):
         item.setSelected(True)
         self.crops_changed.emit()
         return item
+
+    def clear_crops(self) -> None:
+        """Remove all crop rectangles (e.g. when a different video is loaded)."""
+        if not self._crops:
+            return
+        for item in list(self._crops):
+            self._scene.removeItem(item)
+        self._crops.clear()
+        self.crops_changed.emit()
 
     def remove_crop(self, item: CropRectItem) -> None:
         if item not in self._crops:
@@ -106,6 +133,7 @@ class VideoCanvas(QGraphicsView):
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
+        self._position_overlays()
         self._fit()
 
     def showEvent(self, event) -> None:
@@ -113,6 +141,11 @@ class VideoCanvas(QGraphicsView):
         self._fit()
 
     def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton and self._pixmap_item is None:
+            # Empty canvas acts as a browse target.
+            self.browse_requested.emit()
+            event.accept()
+            return
         if (
             event.button() == Qt.MouseButton.LeftButton
             and self._pixmap_item is not None
@@ -122,6 +155,26 @@ class VideoCanvas(QGraphicsView):
             event.accept()
             return
         super().mousePressEvent(event)
+
+    def dragEnterEvent(self, event) -> None:
+        if first_accepted(event.mimeData().urls()) is not None:
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event) -> None:
+        if first_accepted(event.mimeData().urls()) is not None:
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event) -> None:
+        paths = accepted_videos(event.mimeData().urls())
+        if not paths:
+            event.ignore()
+            return
+        event.acceptProposedAction()
+        self.videos_dropped.emit(paths)
 
     def mouseMoveEvent(self, event) -> None:
         if self._draft is not None and self._draft_origin is not None:
@@ -161,6 +214,9 @@ class VideoCanvas(QGraphicsView):
         if self._pixmap_item is None:
             return
         self.fitInView(self._pixmap_item, Qt.AspectRatioMode.KeepAspectRatio)
+
+    def _position_overlays(self) -> None:
+        self._placeholder.setGeometry(self.viewport().rect())
 
     def _crop_item_at(self, view_pos: QPoint) -> CropRectItem | None:
         for item in self.items(view_pos):

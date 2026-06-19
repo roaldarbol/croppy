@@ -49,10 +49,25 @@ class CropRegion:
 class EncodeSettings:
     """Encoding parameters for ffmpeg output. Defaults aim for a good
     quality/size compromise; everything is overridable from the settings panel.
+
+    ``encoder`` chooses the video pipeline:
+
+    * ``"auto"``       — NVENC HEVC when ``hevc_nvenc`` is available, else libx265.
+    * ``"nvenc_hevc"`` — force GPU HEVC (``-cq`` / ``-preset p1..p7``).
+    * ``"libx265"`` / ``"libx264"`` — force CPU x265/x264 (``-crf`` / x264-style preset).
+
+    ``cq``/``nvenc_preset`` apply to the NVENC path; ``crf``/``preset``/``tune``
+    apply to the CPU path. ``pixel_format`` and the audio/container fields apply
+    to both.
     """
 
     container: str = "mp4"
-    video_codec: str = "libx264"
+    encoder: str = "auto"
+    # NVENC (GPU) quality
+    cq: int = 28
+    nvenc_preset: str = "p7"
+    # CPU (libx264/libx265) quality. When ``encoder`` resolves to a CPU codec,
+    # that codec name (``libx264``/``libx265``) is used directly.
     preset: str = "medium"
     crf: int = 18
     tune: str = ""  # empty = no -tune flag
@@ -60,3 +75,8 @@ class EncodeSettings:
     audio_mode: str = "copy"  # "copy" or "aac"
     audio_bitrate: str = "192k"
     faststart: bool = True  # only honored for mp4/mov containers
+    # Stamp the output's creation date from the source clip, so a cropped/
+    # compressed/combined file keeps the *original* recording's "Date created"
+    # while its "Date modified" reflects when croppy wrote it. Windows-only in
+    # practice (see croppy.timestamps); a no-op elsewhere.
+    preserve_created_time: bool = True

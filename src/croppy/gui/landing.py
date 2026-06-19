@@ -18,6 +18,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from croppy.resources import logo_pixmap
+
 VIDEO_EXTENSIONS: tuple[str, ...] = (
     ".mp4",
     ".mov",
@@ -75,6 +77,12 @@ class LandingWidget(QWidget):
         card_layout.setSpacing(12)
         card_layout.setContentsMargins(40, 40, 40, 40)
 
+        logo = QLabel()
+        logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        pixmap = logo_pixmap()
+        if not pixmap.isNull():
+            logo.setPixmap(pixmap.scaledToWidth(180, Qt.TransformationMode.SmoothTransformation))
+
         title = QLabel("Drop a video here")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title_font = title.font()
@@ -90,6 +98,8 @@ class LandingWidget(QWidget):
         self._button.clicked.connect(self.open_dialog)
 
         card_layout.addStretch(1)
+        card_layout.addWidget(logo, alignment=Qt.AlignmentFlag.AlignHCenter)
+        card_layout.addSpacing(8)
         card_layout.addWidget(title)
         card_layout.addWidget(subtitle)
         card_layout.addSpacing(8)
@@ -161,12 +171,19 @@ class LandingWidget(QWidget):
         super().changeEvent(event)
 
 
-def first_accepted(urls: Iterable) -> Path | None:
-    """Return the first URL that is a local existing video file, else ``None``."""
+def accepted_videos(urls: Iterable) -> list[Path]:
+    """Return every URL that is a local existing video file, in order."""
+    paths: list[Path] = []
     for url in urls:
         if not url.isLocalFile():
             continue
         path = Path(url.toLocalFile())
         if is_accepted_video(path):
-            return path
-    return None
+            paths.append(path)
+    return paths
+
+
+def first_accepted(urls: Iterable) -> Path | None:
+    """Return the first URL that is a local existing video file, else ``None``."""
+    paths = accepted_videos(urls)
+    return paths[0] if paths else None

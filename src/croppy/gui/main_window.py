@@ -1,21 +1,20 @@
-"""Top-level QMainWindow. Holds landing → editor swap and the progress dock."""
+"""Top-level QMainWindow: a tabbed host (Crop / Combine / Compress / Jobs) sharing
+one compression config, one job queue, a Jobs tab, and a bottom status strip."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from loguru import logger
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QDockWidget, QMainWindow, QMessageBox
+from PySide6.QtWidgets import QMainWindow, QTabWidget
 
-from croppy.config import load_encode_settings, load_parallel_enabled
-from croppy.ffmpeg.crop import default_output_path
-from croppy.ffmpeg.frame import FrameExtractError, extract_frame
-from croppy.ffmpeg.probe import ProbeError, probe
-from croppy.gui.editor import EditorWidget
-from croppy.gui.landing import LandingWidget
-from croppy.gui.progress_panel import ProgressPanel
-from croppy.jobs.job import CropJob
+from croppy.config import load_parallel_enabled, save_parallel_enabled
+from croppy.gui.combine_tab import CombineTab
+from croppy.gui.compress_tab import CompressTab
+from croppy.gui.compression_panel import CompressionController
+from croppy.gui.crop_tab import CropTab
+from croppy.gui.jobs_panel import JobsPanel
+from croppy.gui.settings_tab import SettingsTab
+from croppy.gui.status_strip import StatusStrip
 from croppy.jobs.queue import JobQueue, suggested_worker_count
 
 
@@ -23,103 +22,58 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("croppy")
-        self.resize(1100, 760)
+        self.resize(1340, 820)
 
-        self._video_path: Path | None = None
-        self._editor: EditorWidget | None = None
-
-        self._landing = LandingWidget(self)
-        self._landing.video_selected.connect(self.open_video)
-        self.setCentralWidget(self._landing)
-
+        # Shared across every tab.
+        self._controller = CompressionController(self)
         self._queue = JobQueue(parent=self)
-        self._progress_dock = QDockWidget("Progress", self)
-        self._progress_dock.setObjectName("progress_dock")
-        self._progress_dock.setAllowedAreas(
-            Qt.DockWidgetArea.BottomDockWidgetArea | Qt.DockWidgetArea.TopDockWidgetArea
-        )
-        self.progress_panel = ProgressPanel(self._queue, parent=self._progress_dock)
-        self.progress_panel.cancel_requested.connect(self._queue.cancel)
-        self._progress_dock.setWidget(self.progress_panel)
-        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self._progress_dock)
-        self._progress_dock.hide()
+
+        parallel = load_parallel_enabled()
+
+        # Tabs.
+        self.tabs = QTabWidget(self)
+        self.crop_tab = CropTab(self._controller, self._queue)
+        self.combine_tab = CombineTab(self._controller, self._queue)
+        self.compress_tab = CompressTab(self._controller, self._queue)
+        self.jobs_panel = JobsPanel(self._queue, parallel_enabled=parallel)
+        self.jobs_panel.parallel_toggled.connect(self._on_parallel_toggled)
+        self.settings_tab = SettingsTab(self._controller)
+        self.tabs.addTab(self.crop_tab, "Crop")
+        self.tabs.addTab(self.combine_tab, "Combine")
+        self.tabs.addTab(self.compress_tab, "Compress")
+        self.tabs.addTab(self.jobs_panel, "Jobs")
+        self.tabs.addTab(self.settings_tab, "Settings")
+        self.setCentralWidget(self.tabs)
+
+        # Always-visible bottom strip summarizing the queue.
+        self._status_strip = StatusStrip(self._queue)
+        self.statusBar().addPermanentWidget(self._status_strip, 1)
+
+        # Match the queue's worker count to the persisted toggle state.
+        self._apply_parallel(self.jobs_panel.parallel_enabled())
 
     # --- public API ---------------------------------------------------------
 
     def open_video(self, path: Path) -> None:
-        logger.info("Opening {}", path)
-        try:
-            info = probe(path)
-            image = extract_frame(path, frame_number=1)
-        except (ProbeError, FrameExtractError) as exc:
-            logger.error("Could not open {}: {}", path, exc)
-            QMessageBox.critical(
-                self,
-                "croppy",
-                f"Could not open <b>{path.name}</b>:<br><br>{exc}",
-            )
-            return
+        """Open ``path`` in the Crop tab (used by the CLI ``croppy <video>``)."""
+        self.tabs.setCurrentWidget(self.crop_tab)
+        self.crop_tab.open_video(path)
 
-        self._video_path = path
-        editor = EditorWidget(
-            info,
-            image,
-            encode_settings=load_encode_settings(),
-            parallel_enabled=load_parallel_enabled(),
-            parent=self,
-        )
-        editor.frame_change_requested.connect(self._reload_frame)
-        editor.video_change_requested.connect(self.open_video)
-        editor.process_requested.connect(self._start_processing)
-        self._editor = editor
-        self.setCentralWidget(editor)
-        self.setWindowTitle(f"croppy — {path.name}")
+    def shutdown(self) -> None:
+        """Cancel running jobs before the app exits (window close / Ctrl+C)."""
+        self._queue.shutdown()
+
+    # --- Qt overrides --------------------------------------------------------
+
+    def closeEvent(self, event) -> None:
+        self.shutdown()
+        super().closeEvent(event)
 
     # --- internals ----------------------------------------------------------
 
-    def _reload_frame(self, frame_number: int) -> None:
-        if self._video_path is None or self._editor is None:
-            return
-        try:
-            image = extract_frame(self._video_path, frame_number=frame_number)
-        except FrameExtractError as exc:
-            logger.warning("Reload frame {} failed: {}", frame_number, exc)
-            QMessageBox.warning(
-                self,
-                "croppy",
-                f"Could not extract frame {frame_number}:<br><br>{exc}",
-            )
-            return
-        self._editor.set_image(image)
+    def _on_parallel_toggled(self, enabled: bool) -> None:
+        save_parallel_enabled(enabled)
+        self._apply_parallel(enabled)
 
-    def _start_processing(self) -> None:
-        if self._video_path is None or self._editor is None:
-            return
-        regions = self._editor.crop_regions()
-        if not regions:
-            return
-        settings = self._editor.encode_settings()
-        info = self._editor.info()
-        output_dir = self._editor.output_dir()
-        workers = suggested_worker_count() if self._editor.parallel_enabled() else 1
-        self._queue.set_max_workers(workers)
-        for index, region in enumerate(regions):
-            output_path = default_output_path(
-                self._video_path,
-                index,
-                container=settings.container,
-                output_dir=output_dir,
-            )
-            job = CropJob(
-                input_path=self._video_path,
-                output_path=output_path,
-                region=region,
-                settings=settings,
-                duration_seconds=info.duration_seconds,
-            )
-            # Row must exist before submit(), because submit() can fire
-            # job_started synchronously.
-            self.progress_panel.add_job(job)
-            self._queue.submit(job)
-        self._progress_dock.show()
-        self._progress_dock.raise_()
+    def _apply_parallel(self, enabled: bool) -> None:
+        self._queue.set_max_workers(suggested_worker_count() if enabled else 1)

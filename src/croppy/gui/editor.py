@@ -1,4 +1,8 @@
-"""Editor view: canvas on the left, sidebar (frame picker / crops / process) on the right."""
+"""Editor view: canvas on the left, sidebar (frame picker / crops / process) on the right.
+
+The editor can be constructed empty — the canvas then shows a drop prompt and the
+whole sidebar is disabled until :meth:`load` is called with a probed video.
+"""
 
 from __future__ import annotations
 
@@ -7,12 +11,10 @@ from pathlib import Path
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QImage
 from PySide6.QtWidgets import (
-    QCheckBox,
     QFileDialog,
     QGroupBox,
     QHBoxLayout,
     QLabel,
-    QLineEdit,
     QListWidget,
     QListWidgetItem,
     QPushButton,
@@ -22,52 +24,95 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from croppy.config import save_encode_settings, save_parallel_enabled
 from croppy.ffmpeg.probe import VideoInfo
 from croppy.gui.canvas import VideoCanvas
+from croppy.gui.compression_panel import CompressionController, CompressionPanel
+from croppy.gui.constants import SIDEBAR_DESCRIPTION_HEIGHT
 from croppy.gui.crop_item import CropRectItem
 from croppy.gui.landing import file_dialog_filter
-from croppy.gui.settings_panel import CollapsibleSection, SettingsPanel
-from croppy.jobs.queue import suggested_worker_count
+from croppy.gui.output_picker import OutputFolderPicker
+from croppy.gui.status_flash import StatusFlash, queued_message
 from croppy.models import CropRegion, EncodeSettings
 
 
 class EditorWidget(QWidget):
     frame_change_requested = Signal(int)
-    video_change_requested = Signal(Path)
+    videos_change_requested = Signal(list)  # videos to open (list[Path])
     process_requested = Signal()
 
     def __init__(
         self,
-        info: VideoInfo,
-        image: QImage,
-        encode_settings: EncodeSettings | None = None,
-        parallel_enabled: bool = False,
+        info: VideoInfo | None = None,
+        image: QImage | None = None,
+        controller: CompressionController | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self._info = info
-        self._encode_settings = encode_settings or EncodeSettings()
-        self._parallel_enabled = parallel_enabled
+        self._info: VideoInfo | None = None
+        # A standalone controller is created when none is supplied (e.g. in tests).
+        self._controller = controller or CompressionController(self)
         self._syncing_selection = False
         self._build_ui()
-        self.canvas.set_image(image)
 
         self.canvas.crops_changed.connect(self._refresh_crops)
         self.canvas.selection_changed.connect(self._on_canvas_selection)
+        self.canvas.videos_dropped.connect(self.videos_change_requested)
+        self.canvas.browse_requested.connect(self._browse_input_videos)
         self.crops_list.itemSelectionChanged.connect(self._on_list_selection)
-        self._refresh_crops()
+
+        if info is not None and image is not None:
+            self.load(info, image)
+        else:
+            self._refresh_crops()
+        # The sidebar (output / frame / crops / encoding) is inactive until a
+        # video is loaded — there is nothing to configure without one.
+        self._sidebar.setEnabled(self._info is not None)
 
     # --- public API ---------------------------------------------------------
+
+    def load(self, info: VideoInfo, image: QImage) -> None:
+        """Populate the editor with a probed video and its preview frame.
+
+        A new video starts clean: previous crops are cleared and the compression
+        panel is reset to the default. The output folder is intentionally kept.
+        """
+        self._info = info
+        self._sidebar.setEnabled(True)
+        # Crops and compression belong to the old clip — drop them.
+        self.canvas.clear_crops()
+        self.compression.reset_to(self._controller.default())
+        self.canvas.set_image(image)
+
+        nframes = f" · {info.nb_frames} frames" if info.nb_frames is not None else ""
+        self.summary.setText(
+            f"<b>{info.path.name}</b><br>"
+            f"{info.width}×{info.height} · "
+            f"{info.fps:.2f} fps · "
+            f"{info.duration_seconds:.2f}s{nframes}"
+        )
+        if not self.output_picker.has_dir():
+            self.output_picker.set_output_dir(info.path.parent)
+
+        self.frame_spin.setMaximum(info.nb_frames or 1_000_000_000)
+        self.frame_spin.setValue(1)
+        self.frame_spin.setEnabled(True)
+        self.reload_btn.setEnabled(True)
+        self._refresh_crops()
 
     def set_image(self, image: QImage) -> None:
         self.canvas.set_image(image)
 
-    def info(self) -> VideoInfo:
+    def show_loading(self, name: str) -> None:
+        """Show a brief 'loading' note while the video is probed off-thread."""
+        self.summary.setText(f"Loading <b>{name}</b>…")
+
+    def info(self) -> VideoInfo | None:
         return self._info
 
     def crop_regions(self) -> list[CropRegion]:
         """Snapped crop regions (even-aligned, clamped to the source frame)."""
+        if self._info is None:
+            return []
         info = self._info
         return [
             item.crop_region().clamped(info.width, info.height).snapped
@@ -75,18 +120,13 @@ class EditorWidget(QWidget):
         ]
 
     def encode_settings(self) -> EncodeSettings:
-        return self.settings_panel.settings()
-
-    def parallel_enabled(self) -> bool:
-        return self.parallel_check.isChecked()
+        return self.compression.settings()
 
     def output_dir(self) -> Path:
-        return Path(self.output_dir_edit.text())
+        return self.output_picker.output_dir()
 
     def set_output_dir(self, path: Path) -> None:
-        text = str(path)
-        self.output_dir_edit.setText(text)
-        self.output_dir_edit.setToolTip(text)
+        self.output_picker.set_output_dir(path)
 
     # --- UI -----------------------------------------------------------------
 
@@ -106,57 +146,33 @@ class EditorWidget(QWidget):
 
     def _build_sidebar(self, parent: QWidget) -> QWidget:
         side = QWidget(parent)
+        self._sidebar = side
         side.setMinimumWidth(280)
         v = QVBoxLayout(side)
         v.setContentsMargins(8, 8, 8, 8)
         v.setSpacing(12)
 
-        nframes = f" · {self._info.nb_frames} frames" if self._info.nb_frames is not None else ""
-        summary = QLabel(
-            f"<b>{self._info.path.name}</b><br>"
-            f"{self._info.width}×{self._info.height} · "
-            f"{self._info.fps:.2f} fps · "
-            f"{self._info.duration_seconds:.2f}s{nframes}"
-        )
-        summary.setWordWrap(True)
-        summary.setTextFormat(Qt.TextFormat.RichText)
-        v.addWidget(summary)
+        self.summary = QLabel("No video loaded — drop one on the canvas or click to browse.")
+        self.summary.setWordWrap(True)
+        self.summary.setTextFormat(Qt.TextFormat.RichText)
+        self.summary.setStyleSheet("color: #888;")
+        # Reserve a consistent height so the controls below align across tabs.
+        self.summary.setFixedHeight(SIDEBAR_DESCRIPTION_HEIGHT)
+        self.summary.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        v.addWidget(self.summary)
 
-        input_group = QGroupBox("Input video")
-        ig = QHBoxLayout(input_group)
-        ig.setContentsMargins(8, 8, 8, 8)
-        ig.setSpacing(6)
-        self.input_path_edit = QLineEdit(str(self._info.path))
-        self.input_path_edit.setReadOnly(True)
-        self.input_path_edit.setToolTip(str(self._info.path))
-        self.input_path_edit.setCursorPosition(0)
-        self.browse_input_btn = QPushButton("Browse…")
-        self.browse_input_btn.clicked.connect(self._browse_input_video)
-        ig.addWidget(self.input_path_edit, 1)
-        ig.addWidget(self.browse_input_btn, 0)
-        v.addWidget(input_group)
-
-        output_group = QGroupBox("Output folder")
-        og = QHBoxLayout(output_group)
-        og.setContentsMargins(8, 8, 8, 8)
-        og.setSpacing(6)
-        self.output_dir_edit = QLineEdit(str(self._info.path.parent))
-        self.output_dir_edit.setReadOnly(True)
-        self.output_dir_edit.setToolTip(str(self._info.path.parent))
-        self.output_dir_edit.setCursorPosition(0)
-        self.browse_output_btn = QPushButton("Browse…")
-        self.browse_output_btn.clicked.connect(self._browse_output_dir)
-        og.addWidget(self.output_dir_edit, 1)
-        og.addWidget(self.browse_output_btn, 0)
-        v.addWidget(output_group)
+        self.output_picker = OutputFolderPicker()
+        v.addWidget(self.output_picker)
 
         frame_group = QGroupBox("Preview frame")
         fl = QHBoxLayout(frame_group)
         self.frame_spin = QSpinBox()
         self.frame_spin.setMinimum(1)
-        self.frame_spin.setMaximum(self._info.nb_frames or 1_000_000_000)
+        self.frame_spin.setMaximum(1_000_000_000)
         self.frame_spin.setValue(1)
+        self.frame_spin.setEnabled(False)
         self.reload_btn = QPushButton("Reload")
+        self.reload_btn.setEnabled(False)
         self.reload_btn.clicked.connect(self._emit_frame_change)
         fl.addWidget(self.frame_spin, 1)
         fl.addWidget(self.reload_btn, 0)
@@ -173,34 +189,26 @@ class EditorWidget(QWidget):
         cl.addWidget(self.empty_label)
         v.addWidget(crops_group)
 
-        self.settings_section = CollapsibleSection("Encoding settings", expanded=False)
-        self.settings_panel = SettingsPanel(initial=self._encode_settings)
-        # Persist edits so encoding settings survive across sessions.
-        self.settings_panel.settings_changed.connect(save_encode_settings)
-        self.settings_section.add_widget(self.settings_panel)
-        v.addWidget(self.settings_section)
+        self.compression = CompressionPanel(
+            initial=self._controller.default(), controller=self._controller
+        )
+        v.addWidget(self.compression)
 
         v.addStretch(1)
 
-        workers = suggested_worker_count()
-        self.parallel_check = QCheckBox(f"Parallel processing (up to {workers} at once)")
-        self.parallel_check.setToolTip(
-            "Process multiple crops at the same time using available CPU cores.\n"
-            "ffmpeg is already multi-threaded, so the speed-up is modest and may\n"
-            "not help on machines with few cores."
-        )
-        self.parallel_check.setEnabled(workers > 1)
-        self.parallel_check.setChecked(self._parallel_enabled and workers > 1)
-        # Persist the toggle so it survives across sessions.
-        self.parallel_check.toggled.connect(save_parallel_enabled)
-        v.addWidget(self.parallel_check)
-
-        self.process_btn = QPushButton("Process")
+        self.process_btn = QPushButton("Add Job to Queue")
         self.process_btn.setEnabled(False)
         self.process_btn.clicked.connect(self.process_requested)
         v.addWidget(self.process_btn)
 
+        self.queued_flash = StatusFlash()
+        v.addWidget(self.queued_flash)
+
         return side
+
+    def confirm_queued(self, count: int) -> None:
+        """Show transient feedback that ``count`` jobs were added to the queue."""
+        self.queued_flash.flash(queued_message(count))
 
     # --- signal handlers ----------------------------------------------------
 
@@ -250,21 +258,15 @@ class EditorWidget(QWidget):
         finally:
             self._syncing_selection = False
 
-    def _browse_input_video(self) -> None:
-        path_str, _ = QFileDialog.getOpenFileName(
+    def _browse_input_videos(self) -> None:
+        start_dir = str(self._info.path.parent) if self._info is not None else ""
+        path_strs, _ = QFileDialog.getOpenFileNames(
             self,
-            "Choose input video",
-            str(self._info.path.parent),
+            "Choose input video(s)",
+            start_dir,
             file_dialog_filter(),
         )
-        if path_str:
-            self.video_change_requested.emit(Path(path_str))
-
-    def _browse_output_dir(self) -> None:
-        chosen = QFileDialog.getExistingDirectory(
-            self,
-            "Choose output folder",
-            str(self.output_dir()),
-        )
-        if chosen:
-            self.set_output_dir(Path(chosen))
+        # The Crop tab opens each as its own list entry (first one shown).
+        paths = [Path(p) for p in path_strs]
+        if paths:
+            self.videos_change_requested.emit(paths)

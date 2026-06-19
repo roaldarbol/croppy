@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import faulthandler
+import gc
+import os
 import subprocess
 from pathlib import Path
 
@@ -9,6 +12,31 @@ import pytest
 from PySide6.QtCore import QCoreApplication, QSettings
 
 from croppy.ffmpeg.binary import find_ffmpeg
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Arm a deadlock watchdog and stop automatic GC during the test session.
+
+    **Watchdog** (when ``CROPPY_TEST_WATCHDOG_SECS`` is set): the suite has hung
+    at *shutdown* on CI (a background thread-pool task outliving the tests can
+    block the pool's no-timeout destructor forever). If the process is still
+    alive this many seconds after start, dump every thread's stack and hard-exit
+    — turning a multi-hour hang into a fast, diagnosable failure. Off by default
+    so local runs are unaffected.
+
+    **GC**: a widget test can leave MediaLoader work running (it forks ffmpeg via
+    a thread pool) into pytest-qt's ``_process_events`` at the end of the *call*
+    phase — before any fixture teardown can drain it. If the automatic cyclic
+    collector fires there, it frees Qt objects on the main thread while those
+    background threads run → segfault (seen on Linux/macOS CI). We disable the
+    automatic collector for the whole session and instead collect explicitly in
+    ``_drain_media_loaders``, once background work has been drained and it's safe.
+    """
+    gc.disable()
+    secs = os.environ.get("CROPPY_TEST_WATCHDOG_SECS")
+    if secs and int(secs) > 0:
+        faulthandler.enable()
+        faulthandler.dump_traceback_later(int(secs), exit=True)
 
 
 @pytest.fixture(autouse=True)
@@ -23,6 +51,27 @@ def _isolate_qsettings(tmp_path: Path) -> None:
         QSettings.Scope.UserScope,
         str(tmp_path),
     )
+
+
+@pytest.fixture(autouse=True)
+def _drain_media_loaders():
+    """Wait for any background MediaLoader work to finish at the end of each test.
+
+    Several widget tests kick off async probe/frame-extraction and assert
+    synchronously without awaiting it. Left running, that work outlives the test
+    and can be garbage-collected mid-event-loop in a later test — a hard
+    segfault on macOS. Draining here keeps background work inside its own test.
+    """
+    yield
+    from croppy.gui.media_loader import MediaLoader
+
+    MediaLoader.drain_all()
+    app = QCoreApplication.instance()
+    if app is not None:
+        app.processEvents()  # deliver any pending result callbacks while widgets live
+    # Safe point to reclaim cycles: background work is drained, so no thread is
+    # live to race the collector (automatic GC is off — see pytest_configure).
+    gc.collect()
 
 
 @pytest.fixture(scope="session")
