@@ -43,6 +43,25 @@ def test_build_combine_command_shape(tmp_path: Path) -> None:
     assert cmd[-1] == str(tmp_path / "out.partial.mp4")
 
 
+def test_combine_fps_filter_added_when_set(tmp_path: Path) -> None:
+    cmd = build_combine_command(
+        list_path=tmp_path / "list.txt",
+        partial_output=tmp_path / "out.partial.mp4",
+        settings=EncodeSettings(fps=10),
+    )
+    assert cmd[cmd.index("-vf") + 1] == "fps=10"
+    assert "-hwaccel_output_format" not in cmd  # CPU filter disables GPU decode
+
+
+def test_combine_no_fps_filter_by_default(tmp_path: Path) -> None:
+    cmd = build_combine_command(
+        list_path=tmp_path / "list.txt",
+        partial_output=tmp_path / "out.partial.mp4",
+        settings=EncodeSettings(encoder="libx264"),
+    )
+    assert "-vf" not in cmd
+
+
 def test_default_combine_output_path(tmp_path: Path) -> None:
     assert default_combine_output_path(tmp_path / "a.mp4") == tmp_path / "a_combined.mp4"
 

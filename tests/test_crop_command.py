@@ -129,6 +129,27 @@ def test_command_snaps_odd_region(tmp_path: Path) -> None:
     assert cmd[cmd.index("-vf") + 1] == "crop=100:80:10:20"
 
 
+def test_fps_appended_to_crop_filter(tmp_path: Path) -> None:
+    cmd = build_crop_command(
+        input_path=tmp_path / "in.mp4",
+        output_path=tmp_path / "out.mp4",
+        region=CropRegion(10, 20, 100, 80),
+        settings=EncodeSettings(fps=10),
+    )
+    # The fps filter chains onto the existing crop filter, comma-separated.
+    assert cmd[cmd.index("-vf") + 1] == "crop=100:80:10:20,fps=10"
+
+
+def test_no_fps_leaves_crop_filter_alone(tmp_path: Path) -> None:
+    cmd = build_crop_command(
+        input_path=tmp_path / "in.mp4",
+        output_path=tmp_path / "out.mp4",
+        region=CropRegion(10, 20, 100, 80),
+        settings=EncodeSettings(),
+    )
+    assert cmd[cmd.index("-vf") + 1] == "crop=100:80:10:20"
+
+
 def test_default_output_path(tmp_path: Path) -> None:
     p = default_output_path(tmp_path / "clip.mp4", index=0)
     assert p == tmp_path / "clip_crop1.mp4"

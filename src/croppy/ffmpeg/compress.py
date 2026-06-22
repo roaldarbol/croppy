@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from croppy.ffmpeg.binary import find_ffmpeg
-from croppy.ffmpeg.encoder import audio_args, encoder_args, faststart_args
+from croppy.ffmpeg.encoder import audio_args, encoder_args, faststart_args, fps_filter
 from croppy.models import EncodeSettings
 
 
@@ -22,8 +22,14 @@ def build_compress_command(
     """Return the ffmpeg argv to compress ``input_path`` to ``output_path``.
 
     Includes ``-progress pipe:1 -nostats`` so a Worker can parse progress.
+
+    When ``settings.fps`` requests a lower frame rate an ``fps`` filter is added;
+    that is a CPU-side filter, so the full GPU decode pipeline is disabled for the
+    job (matching crop's behaviour).
     """
-    input_args, video_args = encoder_args(settings, allow_hwaccel_decode=True)
+    fps = fps_filter(settings)
+    input_args, video_args = encoder_args(settings, allow_hwaccel_decode=fps is None)
+    filter_args = ["-vf", fps] if fps else []
 
     return [
         str(find_ffmpeg()),
@@ -34,6 +40,7 @@ def build_compress_command(
         *input_args,
         "-i",
         str(input_path),
+        *filter_args,
         *video_args,
         *audio_args(settings),
         *faststart_args(settings),

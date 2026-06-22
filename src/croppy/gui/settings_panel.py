@@ -11,6 +11,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QDoubleSpinBox,
     QFormLayout,
     QLabel,
     QSizePolicy,
@@ -186,6 +187,22 @@ class SettingsPanel(QWidget):
             "422/444 keep more colour detail but some players can't open them.",
         )
 
+        self.fps_spin = QDoubleSpinBox()
+        self.fps_spin.setRange(0.0, 240.0)
+        self.fps_spin.setDecimals(2)
+        self.fps_spin.setSingleStep(1.0)
+        # At the minimum (0) the spin box shows this instead of "0.00".
+        self.fps_spin.setSpecialValueText("Keep original")
+        add_row(
+            "Frame rate:",
+            self.fps_spin,
+            "Optionally lower the frame rate.\n"
+            "• Keep original — leave the source rate unchanged\n"
+            "• A number — resample to that many frames per second\n"
+            "  (e.g. 60fps → 10 keeps every 6th frame).\n"
+            "Runs on the CPU, so it turns off GPU-accelerated decoding for the job.",
+        )
+
         self.audio_combo = QComboBox()
         self.audio_combo.addItems(AUDIO_MODES)
         add_row(
@@ -233,6 +250,7 @@ class SettingsPanel(QWidget):
             self.preset_combo,
             self.tune_combo,
             self.pixfmt_combo,
+            self.fps_spin,
             self.audio_combo,
             self.audio_bitrate_combo,
         ):
@@ -252,6 +270,7 @@ class SettingsPanel(QWidget):
         self.preset_combo.currentTextChanged.connect(self._emit)
         self.tune_combo.currentTextChanged.connect(self._emit)
         self.pixfmt_combo.currentTextChanged.connect(self._emit)
+        self.fps_spin.valueChanged.connect(self._emit)
         self.audio_combo.currentTextChanged.connect(self._on_audio_changed)
         self.audio_bitrate_combo.currentTextChanged.connect(self._emit)
         self.faststart_check.toggled.connect(self._emit)
@@ -269,6 +288,7 @@ class SettingsPanel(QWidget):
             crf=self.crf_spin.value(),
             tune=_tune_from_ui(self.tune_combo.currentText()),
             pixel_format=self.pixfmt_combo.currentText(),
+            fps=self.fps_spin.value(),
             audio_mode=self.audio_combo.currentText(),
             audio_bitrate=self.audio_bitrate_combo.currentText(),
             faststart=self.faststart_check.isChecked(),
@@ -293,6 +313,7 @@ class SettingsPanel(QWidget):
             self.tune_combo.setCurrentText(_tune_to_ui(settings.tune))
             if settings.pixel_format in PIXEL_FORMATS:
                 self.pixfmt_combo.setCurrentText(settings.pixel_format)
+            self.fps_spin.setValue(settings.fps)
             if settings.audio_mode in AUDIO_MODES:
                 self.audio_combo.setCurrentText(settings.audio_mode)
             if settings.audio_bitrate in AUDIO_BITRATES:

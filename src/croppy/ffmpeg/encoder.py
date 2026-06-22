@@ -128,6 +128,27 @@ def encoder_args(
     return input_args, output_args
 
 
+def fps_filter(settings: EncodeSettings) -> str | None:
+    """Return the ``fps=`` video-filter string when frame-rate downsampling is
+    requested, else ``None``.
+
+    ``EncodeSettings.fps`` of 0 (the default) keeps the source rate and yields no
+    filter. A positive value resamples to that constant rate with ffmpeg's
+    ``fps`` filter, which selects frames by their timestamps — so 60 → 10 keeps
+    every 6th frame, and uneven ratios like 59.94 → 10 still work. Integer-valued
+    rates are rendered without a trailing ``.0`` for a tidy command line.
+
+    The ``fps`` filter runs on CPU-side frames, so callers that apply it must
+    decode on the CPU (``allow_hwaccel_decode=False``) rather than keeping frames
+    in VRAM.
+    """
+    if settings.fps <= 0:
+        return None
+    value = settings.fps
+    text = str(int(value)) if float(value).is_integer() else str(value)
+    return f"fps={text}"
+
+
 def audio_args(settings: EncodeSettings) -> list[str]:
     """``-c:a`` flags: stream-copy or re-encode to AAC."""
     if settings.audio_mode == "copy":
