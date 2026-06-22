@@ -1,3 +1,3 @@
 """croppy — visual video cropper built on ffmpeg + Qt."""
 
-__version__ = "0.3.1"
+__version__ = "0.3.2"
