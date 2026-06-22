@@ -24,14 +24,21 @@ from croppy.models import EncodeSettings
 
 
 def summarize_settings(settings: EncodeSettings) -> str:
-    """A compact one-line description, e.g. ``Auto · cq 28 · mp4``."""
+    """A compact one-line description, e.g. ``Auto · cq 28 · mp4``.
+
+    When frame-rate downsampling is active it is appended, e.g. ``… · mp4 · 10fps``.
+    """
     if settings.encoder in ("auto", "nvenc_hevc"):
         enc = "Auto" if settings.encoder == "auto" else "HEVC"
         quality = f"cq {settings.cq}"
     else:
         enc = "x265" if settings.encoder == "libx265" else "x264"
         quality = f"crf {settings.crf}"
-    return f"{enc} · {quality} · {settings.container}"
+    summary = f"{enc} · {quality} · {settings.container}"
+    if settings.fps > 0:
+        fps = int(settings.fps) if float(settings.fps).is_integer() else settings.fps
+        summary += f" · {fps}fps"
+    return summary
 
 
 class CompressionController(QObject):

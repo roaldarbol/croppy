@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from croppy.ffmpeg.binary import find_ffmpeg
-from croppy.ffmpeg.encoder import audio_args, encoder_args, faststart_args
+from croppy.ffmpeg.encoder import audio_args, encoder_args, faststart_args, fps_filter
 from croppy.models import CropRegion, EncodeSettings
 
 
@@ -27,6 +27,11 @@ def build_crop_command(
     r = region.snapped
     input_args, video_args = encoder_args(settings, allow_hwaccel_decode=False)
 
+    filters = [f"crop={r.w}:{r.h}:{r.x}:{r.y}"]
+    fps = fps_filter(settings)
+    if fps:
+        filters.append(fps)
+
     return [
         str(find_ffmpeg()),
         "-y",
@@ -37,7 +42,7 @@ def build_crop_command(
         "-i",
         str(input_path),
         "-vf",
-        f"crop={r.w}:{r.h}:{r.x}:{r.y}",
+        ",".join(filters),
         *video_args,
         *audio_args(settings),
         *faststart_args(settings),

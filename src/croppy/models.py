@@ -72,6 +72,12 @@ class EncodeSettings:
     crf: int = 18
     tune: str = ""  # empty = no -tune flag
     pixel_format: str = "yuv420p"
+    # Optional frame-rate downsampling. 0 (the default) keeps the source rate; a
+    # positive value resamples to that constant rate via ffmpeg's ``fps`` filter
+    # (e.g. 60 → 10 keeps every 6th frame). Because ``fps`` is a CPU-side filter,
+    # an active value forces the CPU decode path (no full GPU decode), the same
+    # way crop's ``-vf`` does.
+    fps: float = 0.0
     audio_mode: str = "copy"  # "copy" or "aac"
     audio_bitrate: str = "192k"
     faststart: bool = True  # only honored for mp4/mov containers
