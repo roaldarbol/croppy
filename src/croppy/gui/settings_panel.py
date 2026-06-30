@@ -138,7 +138,16 @@ class SettingsPanel(QWidget):
         row.addWidget(self.apply_all_btn)
         row.addWidget(self.match_source_btn)
         row.addStretch(1)
+        self._master_row = row
         return row
+
+    def add_master_action(self, button: QWidget) -> None:
+        """Place ``button`` on the master "Apply" row, after Match source.
+
+        Lets an owner (e.g. CompressionPanel's Reset) group its top-level action
+        with All / Match source instead of in a separate row.
+        """
+        self._master_row.insertWidget(self._master_row.count() - 1, button)
 
     def _build_fields(self) -> None:
         self.container_combo = QComboBox()
