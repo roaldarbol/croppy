@@ -29,5 +29,10 @@ Thumbs.db
 # Logs
 *.log
 
+# Docs site build output (Zensical) + its internal build cache / uv lockfile
+/site/
+/.cache/
+/uv.lock
+
 # Other 
 .claude
