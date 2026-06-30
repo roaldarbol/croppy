@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from PySide6.QtCore import QRectF
 
-from croppy.ffmpeg.crop import default_output_path
+from croppy.ffmpeg.clip import default_output_path
 from croppy.ffmpeg.frame import extract_frame
 from croppy.ffmpeg.probe import probe
 from croppy.gui.editor import EditorWidget
@@ -86,9 +86,9 @@ def test_main_window_writes_to_chosen_output_dir(
     # Pin a fast CPU encoder so the test doesn't depend on a working GPU. The
     # crop tab's (pristine) compression panel follows the default.
     window._controller.set_default(EncodeSettings(encoder="libx264", preset="ultrafast"))
-    with qtbot.waitSignal(window.crop_tab.video_ready, timeout=5000):
+    with qtbot.waitSignal(window.clip_tab.video_ready, timeout=5000):
         window.open_video(local)
-    editor = window.crop_tab.current_editor()
+    editor = window.clip_tab.current_editor()
     assert editor is not None
 
     editor.set_output_dir(out_dir)
@@ -99,6 +99,7 @@ def test_main_window_writes_to_chosen_output_dir(
     with qtbot.waitSignal(window._queue.job_finished, timeout=30000):
         window._queue.start_all()
 
-    assert (out_dir / "clip_crop1.mp4").is_file()
-    # And it should NOT have landed next to the source
-    assert not (src_dir / "clip_crop1.mp4").exists()
+    # A single output keeps the source name verbatim, in the chosen folder.
+    assert (out_dir / "clip.mp4").is_file()
+    # Nothing was written next to the source: the src folder still holds only it.
+    assert [p.name for p in src_dir.iterdir()] == ["clip.mp4"]

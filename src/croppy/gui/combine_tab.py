@@ -1,9 +1,10 @@
 """Combine tab: concatenate ordered videos into one file — with groups.
 
-Each *group* is one join: an ordered set of videos plus its own output name and
-compression. Rename a group inline in the Groups list (double-click / F2); its
-name is the output file name. "Add Job to Queue" submits one CombineJob per
-ready group.
+Each *group* is one join: an ordered set of videos plus its own output folder,
+filename, and compression. The group's name (renamed inline in the Groups list)
+is just an organisational label; the output filename lives in the Output panel
+and defaults to ``<first clip>_combined``. "Add Job to Queue" submits one
+CombineJob per ready group.
 """
 
 from __future__ import annotations
@@ -27,7 +28,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from croppy.ffmpeg.crop import unique_output_path
+from croppy.ffmpeg.clip import safe_stem, unique_output_path
 from croppy.ffmpeg.probe import ProbeError, probe
 from croppy.gui.compression_panel import CompressionController, CompressionPanel
 from croppy.gui.constants import (
@@ -60,8 +61,9 @@ class _Group:
 
     video_list: VideoList
     settings: EncodeSettings
-    name: str = "Group 1"
+    name: str = "Group 1"  # organisational label only; not the output filename
     output_dir: Path | None = None
+    filename: str = ""  # output base name; defaults from the first clip when empty
 
 
 class CombineTab(QWidget):
@@ -121,8 +123,9 @@ class CombineTab(QWidget):
         v.setSpacing(12)
         hint = QLabel(
             "Each group is one join. Add two or more videos and drag to set the "
-            "order; they are joined top-to-bottom into one file. Double-click a "
-            "group to rename it — the name is the output file."
+            "order; they are joined top-to-bottom into one file. The group name "
+            "(double-click to rename) is just a label — set the output file name "
+            "below."
         )
         hint.setWordWrap(True)
         hint.setStyleSheet("color: #888;")
@@ -131,7 +134,7 @@ class CombineTab(QWidget):
         hint.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         v.addWidget(hint)
 
-        self.output_picker = OutputFolderPicker()
+        self.output_picker = OutputFolderPicker(with_filename=True, filename_label="Filename")
         self.output_picker.changed.connect(self._save_current_output)
         v.addWidget(self.output_picker)
 
@@ -210,6 +213,7 @@ class CombineTab(QWidget):
             self._loading = True
             try:
                 self.output_picker.dir_edit.setText("")
+                self.output_picker.set_filename("")
                 self.compression.set_settings(self._controller.default())
             finally:
                 self._loading = False
@@ -223,6 +227,7 @@ class CombineTab(QWidget):
                 self.output_picker.set_output_dir(group.output_dir)
             else:
                 self.output_picker.dir_edit.setText("")
+            self.output_picker.set_filename(group.filename)
             self.compression.set_settings(group.settings)
         finally:
             self._loading = False
@@ -245,9 +250,9 @@ class CombineTab(QWidget):
     def _save_current_output(self) -> None:
         if self._loading:
             return
-        self.current_group().output_dir = (
-            self.output_picker.output_dir() if self.output_picker.has_dir() else None
-        )
+        group = self.current_group()
+        group.output_dir = self.output_picker.output_dir() if self.output_picker.has_dir() else None
+        group.filename = self.output_picker.filename()
 
     def _save_current_settings(self, settings: EncodeSettings) -> None:
         if self._loading:
@@ -255,17 +260,20 @@ class CombineTab(QWidget):
         self.current_group().settings = settings
 
     def _on_videos_changed(self) -> None:
-        # Default a group's output folder to its first clip's location.
+        # Default a group's output folder + filename from its first clip.
         group = self.current_group()
-        if group.output_dir is None:
-            paths = group.video_list.paths()
-            if paths:
-                self._loading = True
-                try:
-                    self.output_picker.set_output_dir(paths[0].parent)
-                finally:
-                    self._loading = False
-                group.output_dir = paths[0].parent
+        paths = group.video_list.paths()
+        if paths:
+            self._loading = True
+            try:
+                if group.output_dir is None:
+                    group.output_dir = paths[0].parent
+                    self.output_picker.set_output_dir(group.output_dir)
+                if not group.filename:
+                    group.filename = f"{paths[0].stem}_combined"
+                    self.output_picker.set_filename(group.filename)
+            finally:
+                self._loading = False
         self._update_queue_enabled()
 
     def _update_queue_enabled(self) -> None:
@@ -284,15 +292,25 @@ class CombineTab(QWidget):
             return
 
         taken = {job.output_path for job in self._queue.jobs()}
-        stem = group.name.strip() or "combined"
+        fallback = f"{paths[0].stem}_combined"
+        stem = group.filename.strip() or fallback
         if stem.lower().endswith(".mp4"):
             stem = stem[:-4]
-        output_path = unique_output_path(group.output_dir / f"{stem}.mp4", taken)
+        output_path = unique_output_path(
+            group.output_dir / f"{safe_stem(stem, fallback)}.mp4", taken
+        )
+        # Combine always writes mp4; only the encoder can be source-inherited, so
+        # resolve it against the first clip (matching the created-date convention).
+        try:
+            settings = group.settings.for_source(codec=probe(paths[0]).codec, container="mp4")
+        except ProbeError as exc:
+            logger.warning("Could not probe {} before combining: {}", paths[0], exc)
+            settings = group.settings
         job = CombineJob(
             output_path=output_path,
             duration_seconds=_total_duration(paths),
             inputs=paths,
-            settings=group.settings,
+            settings=settings,
         )
         self._queue.submit(job)
         self.queued_flash.flash(queued_message(1))

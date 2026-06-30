@@ -11,13 +11,13 @@ from unittest.mock import MagicMock
 
 from croppy.gui.jobs_panel import JobsPanel
 from croppy.gui.status_strip import StatusStrip
-from croppy.jobs.job import CompressJob, CropJob, JobState
+from croppy.jobs.job import ClipJob, CompressJob, JobState
 from croppy.jobs.queue import JobQueue
 from croppy.models import CropRegion, EncodeSettings
 
 
-def _crop(out_path: Path, duration: float = 2.0) -> CropJob:
-    return CropJob(
+def _crop(out_path: Path, duration: float = 2.0) -> ClipJob:
+    return ClipJob(
         input_path=Path("/dev/null"),
         output_path=out_path,
         region=CropRegion(0, 0, 64, 64),

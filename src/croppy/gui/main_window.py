@@ -1,4 +1,4 @@
-"""Top-level QMainWindow: a tabbed host (Crop / Combine / Compress / Jobs) sharing
+"""Top-level QMainWindow: a tabbed host (Clip / Combine / Compress / Jobs) sharing
 one compression config, one job queue, a Jobs tab, and a bottom status strip."""
 
 from __future__ import annotations
@@ -8,10 +8,10 @@ from pathlib import Path
 from PySide6.QtWidgets import QMainWindow, QTabWidget
 
 from croppy.config import load_parallel_enabled, save_parallel_enabled
+from croppy.gui.clip_tab import ClipTab
 from croppy.gui.combine_tab import CombineTab
 from croppy.gui.compress_tab import CompressTab
 from croppy.gui.compression_panel import CompressionController
-from croppy.gui.crop_tab import CropTab
 from croppy.gui.jobs_panel import JobsPanel
 from croppy.gui.settings_tab import SettingsTab
 from croppy.gui.status_strip import StatusStrip
@@ -37,13 +37,13 @@ class MainWindow(QMainWindow):
 
         # Tabs.
         self.tabs = QTabWidget(self)
-        self.crop_tab = CropTab(self._controller, self._queue)
+        self.clip_tab = ClipTab(self._controller, self._queue)
         self.combine_tab = CombineTab(self._controller, self._queue)
         self.compress_tab = CompressTab(self._controller, self._queue)
         self.jobs_panel = JobsPanel(self._queue, parallel_enabled=parallel)
         self.jobs_panel.parallel_toggled.connect(self._on_parallel_toggled)
         self.settings_tab = SettingsTab(self._controller)
-        self.tabs.addTab(self.crop_tab, "Crop")
+        self.tabs.addTab(self.clip_tab, "Clip")
         self.tabs.addTab(self.combine_tab, "Combine")
         self.tabs.addTab(self.compress_tab, "Compress")
         self.tabs.addTab(self.jobs_panel, "Jobs")
@@ -60,9 +60,9 @@ class MainWindow(QMainWindow):
     # --- public API ---------------------------------------------------------
 
     def open_video(self, path: Path) -> None:
-        """Open ``path`` in the Crop tab (used by the CLI ``croppy <video>``)."""
-        self.tabs.setCurrentWidget(self.crop_tab)
-        self.crop_tab.open_video(path)
+        """Open ``path`` in the Clip tab (used by the CLI ``croppy <video>``)."""
+        self.tabs.setCurrentWidget(self.clip_tab)
+        self.clip_tab.open_video(path)
 
     def shutdown(self) -> None:
         """Cancel running jobs before the app exits (window close / Ctrl+C)."""

@@ -1,4 +1,4 @@
-"""Tests for the multi-video Crop tab (open videos list + per-video state)."""
+"""Tests for the multi-video Clip tab (open videos list + per-video state)."""
 
 from __future__ import annotations
 
@@ -8,9 +8,10 @@ from unittest.mock import MagicMock
 
 from PySide6.QtCore import QRectF
 
+from croppy.gui.clip_tab import ClipTab
 from croppy.gui.compression_panel import CompressionController
-from croppy.gui.crop_tab import CropTab
-from croppy.jobs.job import CropJob
+from croppy.jobs.job import ClipJob
+from croppy.models import Trim
 
 
 def _copy(test_video: Path, dest: Path) -> Path:
@@ -18,14 +19,14 @@ def _copy(test_video: Path, dest: Path) -> Path:
     return dest
 
 
-def _open(tab: CropTab, path: Path, qtbot) -> None:
+def _open(tab: ClipTab, path: Path, qtbot) -> None:
     """Open a video and wait for its async probe + preview load to finish."""
     with qtbot.waitSignal(tab.video_ready, timeout=5000):
         tab.open_video(path)
 
 
 def test_opens_multiple_videos(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
-    tab = CropTab(CompressionController(), MagicMock())
+    tab = ClipTab(CompressionController(), MagicMock())
     qtbot.addWidget(tab)
     a = _copy(test_video, tmp_path / "a.mp4")
     b = _copy(test_video, tmp_path / "b.mp4")
@@ -39,7 +40,7 @@ def test_opens_multiple_videos(qtbot, qapp, test_video: Path, tmp_path: Path) ->
 def test_open_videos_lists_all_and_selects_first(
     qtbot, qapp, test_video: Path, tmp_path: Path
 ) -> None:
-    tab = CropTab(CompressionController(), MagicMock())
+    tab = ClipTab(CompressionController(), MagicMock())
     qtbot.addWidget(tab)
     # Stub the async frame load: list insertion + selection are synchronous, so
     # this exercises open_videos' behaviour without spawning loader threads.
@@ -53,7 +54,7 @@ def test_open_videos_lists_all_and_selects_first(
 
 
 def test_per_video_crops_are_isolated(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
-    tab = CropTab(CompressionController(), MagicMock())
+    tab = ClipTab(CompressionController(), MagicMock())
     qtbot.addWidget(tab)
     _open(tab, _copy(test_video, tmp_path / "a.mp4"), qtbot)
     tab.current_editor().canvas.add_crop(QRectF(0, 0, 80, 80))
@@ -69,7 +70,7 @@ def test_queue_editor_submits_one_job_per_crop(
     qtbot, qapp, test_video: Path, tmp_path: Path
 ) -> None:
     queue = MagicMock()
-    tab = CropTab(CompressionController(), queue)
+    tab = ClipTab(CompressionController(), queue)
     qtbot.addWidget(tab)
     a = _copy(test_video, tmp_path / "a.mp4")
     _open(tab, a, qtbot)
@@ -80,12 +81,58 @@ def test_queue_editor_submits_one_job_per_crop(
     editor.process_btn.click()
     assert queue.submit.call_count == 2
     job = queue.submit.call_args[0][0]
-    assert isinstance(job, CropJob)
+    assert isinstance(job, ClipJob)
     assert job.input_path == a
 
 
+def test_queue_editor_cross_products_crops_and_trims(
+    qtbot, qapp, test_video: Path, tmp_path: Path
+) -> None:
+    submitted: list = []
+    queue = MagicMock()
+    queue.jobs.side_effect = lambda: list(submitted)
+    queue.submit.side_effect = lambda job: submitted.append(job)
+    tab = ClipTab(CompressionController(), queue)
+    qtbot.addWidget(tab)
+    _open(tab, _copy(test_video, tmp_path / "a.mp4"), qtbot)
+    editor = tab.current_editor()
+    editor.canvas.add_crop(QRectF(0, 0, 100, 100))
+    editor.canvas.add_crop(QRectF(20, 20, 60, 60))
+    editor.trim.add_trim(Trim(start_frame=1, end_frame=10))
+
+    editor.process_btn.click()
+    # 2 crops x 1 trim = 2 jobs, each carrying a resolved (start, duration) trim.
+    assert len(submitted) == 2
+    names = sorted(j.output_path.name for j in submitted)
+    assert names == ["a_crop1_trim1.mp4", "a_crop2_trim1.mp4"]
+    assert all(j.trim is not None for j in submitted)
+
+
+def test_queue_editor_trim_only_uses_full_frame(
+    qtbot, qapp, test_video: Path, tmp_path: Path
+) -> None:
+    submitted: list = []
+    queue = MagicMock()
+    queue.jobs.side_effect = lambda: list(submitted)
+    queue.submit.side_effect = lambda job: submitted.append(job)
+    tab = ClipTab(CompressionController(), queue)
+    qtbot.addWidget(tab)
+    _open(tab, _copy(test_video, tmp_path / "a.mp4"), qtbot)
+    editor = tab.current_editor()
+    editor.output_picker.set_filename("snip")
+    editor.trim.add_trim(Trim(start_frame=2, end_frame=5))
+
+    editor.process_btn.click()
+    assert len(submitted) == 1
+    job = submitted[0]
+    assert job.region is None  # no crop → full frame
+    assert job.trim is not None
+    # A lone output keeps the chosen name verbatim (no _trim1 suffix).
+    assert job.output_path.name == "snip.mp4"
+
+
 def test_duplicate_copies_crops_and_settings(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
-    tab = CropTab(CompressionController(), MagicMock())
+    tab = ClipTab(CompressionController(), MagicMock())
     qtbot.addWidget(tab)
     a = _copy(test_video, tmp_path / "a.mp4")
     _open(tab, a, qtbot)
@@ -111,19 +158,59 @@ def test_queue_uniquifies_repeat_outputs(qtbot, qapp, test_video: Path, tmp_path
     queue = MagicMock()
     queue.jobs.side_effect = lambda: list(submitted)
     queue.submit.side_effect = lambda job: submitted.append(job)
-    tab = CropTab(CompressionController(), queue)
+    tab = ClipTab(CompressionController(), queue)
     qtbot.addWidget(tab)
     _open(tab, _copy(test_video, tmp_path / "a.mp4"), qtbot)
-    tab.current_editor().canvas.add_crop(QRectF(0, 0, 100, 100))
+    editor = tab.current_editor()
+    editor.output_picker.set_filename("out")
+    editor.canvas.add_crop(QRectF(0, 0, 100, 100))
 
-    tab.current_editor().process_btn.click()  # a_crop1.mp4
-    tab.current_editor().process_btn.click()  # a_crop1-2.mp4
+    editor.process_btn.click()  # out.mp4
+    editor.process_btn.click()  # out-2.mp4
     names = [j.output_path.name for j in submitted]
-    assert names == ["a_crop1.mp4", "a_crop1-2.mp4"]
+    assert names == ["out.mp4", "out-2.mp4"]
+
+
+def test_queue_single_output_uses_custom_name_verbatim(
+    qtbot, qapp, test_video: Path, tmp_path: Path
+) -> None:
+    submitted: list = []
+    queue = MagicMock()
+    queue.jobs.side_effect = lambda: list(submitted)
+    queue.submit.side_effect = lambda job: submitted.append(job)
+    tab = ClipTab(CompressionController(), queue)
+    qtbot.addWidget(tab)
+    _open(tab, _copy(test_video, tmp_path / "a.mp4"), qtbot)
+    editor = tab.current_editor()
+    editor.output_picker.set_filename("interview")
+    editor.canvas.add_crop(QRectF(0, 0, 100, 100))
+
+    editor.process_btn.click()
+    assert [j.output_path.name for j in submitted] == ["interview.mp4"]
+
+
+def test_queue_multiple_outputs_append_suffix_to_custom_name(
+    qtbot, qapp, test_video: Path, tmp_path: Path
+) -> None:
+    submitted: list = []
+    queue = MagicMock()
+    queue.jobs.side_effect = lambda: list(submitted)
+    queue.submit.side_effect = lambda job: submitted.append(job)
+    tab = ClipTab(CompressionController(), queue)
+    qtbot.addWidget(tab)
+    _open(tab, _copy(test_video, tmp_path / "a.mp4"), qtbot)
+    editor = tab.current_editor()
+    editor.output_picker.set_filename("interview")
+    editor.canvas.add_crop(QRectF(0, 0, 100, 100))
+    editor.canvas.add_crop(QRectF(20, 20, 60, 60))
+
+    editor.process_btn.click()
+    names = sorted(j.output_path.name for j in submitted)
+    assert names == ["interview_crop1.mp4", "interview_crop2.mp4"]
 
 
 def test_remove_video(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
-    tab = CropTab(CompressionController(), MagicMock())
+    tab = ClipTab(CompressionController(), MagicMock())
     qtbot.addWidget(tab)
     _open(tab, _copy(test_video, tmp_path / "a.mp4"), qtbot)
     _open(tab, _copy(test_video, tmp_path / "b.mp4"), qtbot)
@@ -134,21 +221,21 @@ def test_remove_video(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
 
 
 def test_placeholder_sidebar_inactive(qtbot, qapp) -> None:
-    tab = CropTab(CompressionController(), MagicMock())
+    tab = ClipTab(CompressionController(), MagicMock())
     qtbot.addWidget(tab)
     # No video open → the placeholder editor's sidebar is inactive.
     assert not tab._placeholder._sidebar.isEnabled()
 
 
 def test_open_video_activates_sidebar(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
-    tab = CropTab(CompressionController(), MagicMock())
+    tab = ClipTab(CompressionController(), MagicMock())
     qtbot.addWidget(tab)
     _open(tab, _copy(test_video, tmp_path / "a.mp4"), qtbot)
     assert tab.current_editor()._sidebar.isEnabled()
 
 
 def test_remove_last_shows_placeholder(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
-    tab = CropTab(CompressionController(), MagicMock())
+    tab = ClipTab(CompressionController(), MagicMock())
     qtbot.addWidget(tab)
     _open(tab, _copy(test_video, tmp_path / "a.mp4"), qtbot)
     tab._remove_current()

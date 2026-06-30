@@ -96,6 +96,13 @@ def test_load_new_video_clears_crops_and_resets_compression(qtbot, qapp, test_vi
     assert editor.encode_settings().cq == EncodeSettings().cq
 
 
+def test_output_name_defaults_to_source_stem(qtbot, qapp, test_video: Path) -> None:
+    editor = EditorWidget()
+    qtbot.addWidget(editor)
+    editor.load(probe(test_video), extract_frame(test_video, 1))
+    assert editor.output_name() == test_video.stem
+
+
 def test_load_new_video_keeps_output_dir(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
     editor = EditorWidget()
     qtbot.addWidget(editor)

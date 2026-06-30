@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
+from loguru import logger
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QComboBox,
+    QFileDialog,
     QFormLayout,
     QHBoxLayout,
     QLabel,
+    QMessageBox,
     QPushButton,
     QSizePolicy,
     QVBoxLayout,
@@ -18,6 +23,7 @@ from croppy.config import load_log_level, save_log_level
 from croppy.gui.compression_panel import CompressionController
 from croppy.gui.settings_panel import SettingsPanel
 from croppy.logging import LEVELS, current_level, set_level
+from croppy.preset import PresetError, load_preset, save_preset
 
 
 class SettingsTab(QWidget):
@@ -73,6 +79,22 @@ class SettingsTab(QWidget):
         self.settings_panel = SettingsPanel(initial=self._controller.default())
         self.settings_panel.settings_changed.connect(self._on_edited)
         layout.addWidget(self.settings_panel)
+
+        # Import/Export a .toml *preset* — distinct from "Save settings" below,
+        # which persists the current state as the app default. Import loads a
+        # file into the form (you then Save settings to keep it); Export writes
+        # whatever the form currently shows.
+        preset_row = QHBoxLayout()
+        self.import_btn = QPushButton("Import…")
+        self.import_btn.setToolTip("Load encoding settings from a .toml file into the form.")
+        self.import_btn.clicked.connect(self._import_preset)
+        self.export_btn = QPushButton("Export…")
+        self.export_btn.setToolTip("Save the encoding settings shown here to a .toml file.")
+        self.export_btn.clicked.connect(self._export_preset)
+        preset_row.addWidget(self.import_btn)
+        preset_row.addWidget(self.export_btn)
+        preset_row.addStretch(1)
+        layout.addLayout(preset_row)
 
         layout.addStretch(1)
         return column
@@ -160,3 +182,40 @@ class SettingsTab(QWidget):
         self._saved_log_level = level
         self.save_btn.setEnabled(False)
         self._status.setText("Saved ✓")
+
+    # --- preset import/export -----------------------------------------------
+
+    def _export_preset(self) -> None:
+        path_str, _ = QFileDialog.getSaveFileName(
+            self, "Export encoding settings", "croppy-encoding.toml", "TOML preset (*.toml)"
+        )
+        if not path_str:
+            return
+        path = Path(path_str)
+        if path.suffix == "":
+            path = path.with_suffix(".toml")
+        try:
+            save_preset(self.settings_panel.settings(), path)
+        except OSError as exc:
+            logger.warning("Could not export preset to {}: {}", path, exc)
+            QMessageBox.warning(self, "croppy", f"Could not write the preset:<br><br>{exc}")
+            return
+        self._status.setText(f"Exported to {path.name} ✓")
+
+    def _import_preset(self) -> None:
+        path_str, _ = QFileDialog.getOpenFileName(
+            self, "Import encoding settings", "", "TOML preset (*.toml);;All files (*)"
+        )
+        if not path_str:
+            return
+        try:
+            settings = load_preset(Path(path_str))
+        except PresetError as exc:
+            logger.warning("Could not import preset from {}: {}", path_str, exc)
+            QMessageBox.warning(self, "croppy", f"Could not import the preset:<br><br>{exc}")
+            return
+        # Load into the form only; the user still clicks "Save settings" to make
+        # it the persisted default (so import never silently changes the default).
+        self.settings_panel.set_settings(settings)
+        self.save_btn.setEnabled(self._dirty())
+        self._status.setText("Imported — click Save settings to keep")

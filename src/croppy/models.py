@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 
 def _floor_even(value: int) -> int:
@@ -46,6 +46,70 @@ class CropRegion:
 
 
 @dataclass(frozen=True)
+class Trim:
+    """A temporal segment of the source, as a 1-based *inclusive* frame range.
+
+    Frames are the canonical unit so a trim is independent of any float-seconds
+    rounding and lines up with the editor's preview-frame picker (frame 1 is the
+    first frame). The ffmpeg ``-ss``/``-t`` pair is resolved from the clip's fps
+    only at submit time via :meth:`to_seconds`.
+    """
+
+    start_frame: int
+    end_frame: int
+
+    @property
+    def n_frames(self) -> int:
+        """Number of frames covered (inclusive of both ends; always >= 1)."""
+        return max(1, self.end_frame - self.start_frame + 1)
+
+    def to_seconds(self, fps: float) -> tuple[float, float]:
+        """Return ``(start_seconds, duration_seconds)`` for ffmpeg ``-ss``/``-t``.
+
+        ``start`` is the in-frame's timestamp ``(start_frame - 1) / fps``;
+        ``duration`` spans the inclusive frame count, so a 1-frame trim lasts
+        ``1 / fps``. Raises if ``fps`` is non-positive (can't resolve a time).
+        """
+        if fps <= 0:
+            raise ValueError("fps must be positive to resolve a trim to seconds")
+        start = (self.start_frame - 1) / fps
+        duration = self.n_frames / fps
+        return start, duration
+
+    def clamped(self, nb_frames: int) -> Trim:
+        """Return a copy with both ends inside ``[1, nb_frames]`` and start <= end."""
+        start = max(1, min(self.start_frame, nb_frames))
+        end = max(start, min(self.end_frame, nb_frames))
+        return Trim(start_frame=start, end_frame=end)
+
+
+# Encoding parameters the user can individually enable ("apply croppy's value")
+# or disable ("keep the source / let the encoder default"). The membership of
+# ``EncodeSettings.applied`` decides this per setting. ``DEFAULT_APPLIED`` mirrors
+# the historical always-on behaviour (fps/audio were already "off" by their old
+# sentinels — 0 fps, copy audio — so they start disabled here).
+APPLY_KEYS: tuple[str, ...] = (
+    "container",
+    "encoder",
+    "cq",
+    "nvenc_preset",
+    "crf",
+    "preset",
+    "pixel_format",
+    "fps",
+    "audio",
+)
+DEFAULT_APPLIED: frozenset[str] = frozenset(
+    {"container", "encoder", "cq", "nvenc_preset", "crf", "preset", "pixel_format"}
+)
+
+
+def _cpu_encoder_for(codec: str) -> str:
+    """Closest CPU encoder for re-encoding a source in ``codec`` (its family)."""
+    return "libx265" if codec.lower() in ("hevc", "h265") else "libx264"
+
+
+@dataclass(frozen=True)
 class EncodeSettings:
     """Encoding parameters for ffmpeg output. Defaults aim for a good
     quality/size compromise; everything is overridable from the settings panel.
@@ -56,9 +120,15 @@ class EncodeSettings:
     * ``"nvenc_hevc"`` — force GPU HEVC (``-cq`` / ``-preset p1..p7``).
     * ``"libx265"`` / ``"libx264"`` — force CPU x265/x264 (``-crf`` / x264-style preset).
 
-    ``cq``/``nvenc_preset`` apply to the NVENC path; ``crf``/``preset``/``tune``
-    apply to the CPU path. ``pixel_format`` and the audio/container fields apply
-    to both.
+    ``cq``/``nvenc_preset`` apply to the NVENC path; ``crf``/``preset`` and
+    ``pixel_format`` apply to the CPU path.
+
+    ``applied`` lists which parameters croppy actually forces onto ffmpeg (see
+    :data:`APPLY_KEYS`). A key that is *absent* means "don't impose it": the
+    relevant flag is omitted so ffmpeg keeps the source's value (or its own
+    default). ``container``/``encoder`` are always emitted, but when absent from
+    ``applied`` their value is taken from the source via
+    :meth:`for_source` instead of these fields.
     """
 
     container: str = "mp4"
@@ -70,15 +140,13 @@ class EncodeSettings:
     # that codec name (``libx264``/``libx265``) is used directly.
     preset: str = "medium"
     crf: int = 18
-    tune: str = ""  # empty = no -tune flag
     pixel_format: str = "yuv420p"
-    # Optional frame-rate downsampling. 0 (the default) keeps the source rate; a
-    # positive value resamples to that constant rate via ffmpeg's ``fps`` filter
-    # (e.g. 60 → 10 keeps every 6th frame). Because ``fps`` is a CPU-side filter,
-    # an active value forces the CPU decode path (no full GPU decode), the same
-    # way crop's ``-vf`` does.
+    # Frame-rate resampling target, emitted as an ``fps`` filter only when "fps"
+    # is in ``applied`` (and > 0). Because ``fps`` is a CPU-side filter, an active
+    # value forces the CPU decode path, the same way crop's ``-vf`` does.
     fps: float = 0.0
-    audio_mode: str = "copy"  # "copy" or "aac"
+    # Audio: re-encode to AAC at this bitrate when "audio" is in ``applied``,
+    # otherwise stream-copy the source audio.
     audio_bitrate: str = "192k"
     faststart: bool = True  # only honored for mp4/mov containers
     # Stamp the output's creation date from the source clip, so a cropped/
@@ -86,3 +154,21 @@ class EncodeSettings:
     # while its "Date modified" reflects when croppy wrote it. Windows-only in
     # practice (see croppy.timestamps); a no-op elsewhere.
     preserve_created_time: bool = True
+    #: Which of :data:`APPLY_KEYS` croppy forces (see the class docstring).
+    applied: frozenset[str] = DEFAULT_APPLIED
+
+    def is_on(self, key: str) -> bool:
+        """True if ``key`` is being applied (forced) rather than inherited."""
+        return key in self.applied
+
+    def for_source(self, *, codec: str, container: str) -> EncodeSettings:
+        """Resolve source-inherited fields against a concrete source.
+
+        When ``container``/``encoder`` are *not* applied, substitute the source's
+        container and a matching CPU encoder so the always-emitted muxer/codec
+        track the input. Omitted-flag settings (quality, preset, …) need no
+        substitution — the arg builders simply skip them.
+        """
+        new_container = self.container if self.is_on("container") else (container or self.container)
+        new_encoder = self.encoder if self.is_on("encoder") else _cpu_encoder_for(codec)
+        return replace(self, container=new_container, encoder=new_encoder)

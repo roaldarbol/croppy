@@ -12,7 +12,7 @@ from croppy.ffmpeg.combine import (
     write_concat_list,
 )
 from croppy.jobs.job import CombineJob
-from croppy.models import EncodeSettings
+from croppy.models import DEFAULT_APPLIED, EncodeSettings
 
 
 def test_write_concat_list_uses_forward_slashes(tmp_path: Path) -> None:
@@ -47,7 +47,7 @@ def test_combine_fps_filter_added_when_set(tmp_path: Path) -> None:
     cmd = build_combine_command(
         list_path=tmp_path / "list.txt",
         partial_output=tmp_path / "out.partial.mp4",
-        settings=EncodeSettings(fps=10),
+        settings=EncodeSettings(fps=10, applied=DEFAULT_APPLIED | {"fps"}),
     )
     assert cmd[cmd.index("-vf") + 1] == "fps=10"
     assert "-hwaccel_output_format" not in cmd  # CPU filter disables GPU decode

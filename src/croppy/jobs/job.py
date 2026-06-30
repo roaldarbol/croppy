@@ -1,4 +1,4 @@
-"""Job data models. One base :class:`Job` with crop / compress / combine variants.
+"""Job data models. One base :class:`Job` with clip / compress / combine variants.
 
 A :class:`Job` carries everything a Worker needs to run one ffmpeg invocation and
 report progress: it builds its own argv and exposes optional success/cleanup
@@ -14,6 +14,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import ClassVar
 
+from croppy.ffmpeg.clip import build_clip_command
 from croppy.ffmpeg.combine import (
     build_combine_command,
     build_faststart_remux_command,
@@ -21,7 +22,6 @@ from croppy.ffmpeg.combine import (
     write_concat_list,
 )
 from croppy.ffmpeg.compress import build_compress_command
-from croppy.ffmpeg.crop import build_crop_command
 from croppy.models import CropRegion, EncodeSettings
 from croppy.timestamps import read_created_time, set_created_time
 
@@ -120,14 +120,20 @@ class Job(ABC):
 
 
 @dataclass(kw_only=True)
-class CropJob(Job):
-    kind: ClassVar[str] = "crop"
+class ClipJob(Job):
+    kind: ClassVar[str] = "clip"
     input_path: Path
-    region: CropRegion
+    #: Spatial crop, or ``None`` to keep the full frame.
+    region: CropRegion | None
     settings: EncodeSettings
+    #: Optional ``(start_seconds, duration_seconds)`` temporal trim; ``None``
+    #: keeps the whole timeline. Resolved from the clip's fps at submit time.
+    trim: tuple[float, float] | None = None
 
     def build_command(self) -> list[str]:
-        return build_crop_command(self.input_path, self.partial_output, self.region, self.settings)
+        return build_clip_command(
+            self.input_path, self.partial_output, self.region, self.settings, self.trim
+        )
 
     def _source_created_time(self) -> float | None:
         if not self.settings.preserve_created_time:

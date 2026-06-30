@@ -1,9 +1,10 @@
-"""Crop tab: open several videos at once and crop each independently.
+"""Clip tab: open several videos at once and crop/trim each independently.
 
 A left "Open videos" list holds every open clip; selecting one shows its preview
-+ ROIs in the center editor. Each open video keeps its own crops, compression,
-output folder, and preview frame. Dropping a video (or "Add video…") opens
-another; each editor's "Add Job to Queue" queues that video's crops.
++ ROIs in the center editor. Each open video keeps its own crops, trims,
+compression, output folder, and preview frame. Dropping a video (or "Add video…")
+opens another; each editor's queue button submits that video's clips (one job per
+crop × trim).
 """
 
 from __future__ import annotations
@@ -25,7 +26,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from croppy.ffmpeg.crop import default_output_path, unique_output_path
+from croppy.ffmpeg.clip import clip_output_path, unique_output_path
 from croppy.ffmpeg.frame import extract_frame
 from croppy.ffmpeg.preview import probe_with_first_frame
 from croppy.ffmpeg.probe import VideoInfo, probe
@@ -33,7 +34,7 @@ from croppy.gui.compression_panel import CompressionController
 from croppy.gui.constants import PANEL_MARGIN, panel_header
 from croppy.gui.editor import EditorWidget
 from croppy.gui.media_loader import MediaLoader
-from croppy.jobs.job import CropJob
+from croppy.jobs.job import ClipJob
 from croppy.jobs.queue import JobQueue
 
 
@@ -43,8 +44,8 @@ class _OpenVideo:
     editor: EditorWidget
 
 
-class CropTab(QWidget):
-    """Crop several open videos; the selected one is shown in the editor."""
+class ClipTab(QWidget):
+    """Crop/trim several open videos; the selected one is shown in the editor."""
 
     video_ready = Signal(object)  # an editor finished loading its video (EditorWidget)
     frame_reloaded = Signal(object)  # an editor finished reloading its preview frame
@@ -177,8 +178,10 @@ class CropTab(QWidget):
         # Snapshot the source's crops/settings/output now (no ffmpeg needed); they
         # are applied once the duplicate's preview frame has loaded.
         crop_rects = [crop.crop_region() for crop in src.editor.canvas.crops()]
+        trims = src.editor.trims()
         settings = src.editor.encode_settings()
         output_dir = src.editor.output_dir()
+        output_name = src.editor.output_name()
         # The duplicate is the same file the source already probed — reuse its
         # VideoInfo so we only re-open the file for the one frame we need.
         src_info = src.editor.info()
@@ -195,8 +198,12 @@ class CropTab(QWidget):
             editor.frame_spin.setValue(frame)
             for r in crop_rects:
                 editor.canvas.add_crop(QRectF(r.x, r.y, r.w, r.h))
+            for trim in trims:
+                editor.trim.add_trim(trim)
             editor.compression.adopt(settings)
             editor.set_output_dir(output_dir)
+            if output_name:
+                editor.output_picker.set_filename(output_name)
             self.video_ready.emit(editor)
 
         def failed(message: str) -> None:
@@ -275,29 +282,56 @@ class CropTab(QWidget):
         if video is None:
             return
         regions = editor.crop_regions()
-        if not regions:
+        trims = editor.trims()
+        if not regions and not trims:
             return
-        settings = editor.encode_settings()
         info = editor.info()
+        # Resolve any source-inherited settings (container/encoder) against this
+        # clip, so disabled rows keep the source's container/codec.
+        settings = editor.encode_settings().for_source(
+            codec=info.codec, container=video.path.suffix.lstrip(".").lower()
+        )
         output_dir = editor.output_dir()
         taken = {job.output_path for job in self._queue.jobs()}
-        for index, region in enumerate(regions):
-            output_path = unique_output_path(
-                default_output_path(
-                    video.path,
-                    index,
-                    container=settings.container,
-                    output_dir=output_dir,
-                ),
-                taken,
-            )
-            taken.add(output_path)
-            job = CropJob(
-                output_path=output_path,
-                duration_seconds=info.duration_seconds,
-                input_path=video.path,
-                region=region,
-                settings=settings,
-            )
-            self._queue.submit(job)
-        editor.confirm_queued(len(regions))
+
+        # One job per (crop x trim). An empty list contributes a single "no-op"
+        # choice so crop-only and trim-only both still produce one axis of jobs.
+        region_choices = regions or [None]
+        trim_choices = trims or [None]
+        # A lone output keeps the chosen name verbatim; only when several files
+        # come from one video do we append _crop/_trim to keep them distinct.
+        many = len(region_choices) * len(trim_choices) > 1
+        stem = editor.output_name()
+        count = 0
+        for ci, region in enumerate(region_choices):
+            for ti, trim in enumerate(trim_choices):
+                output_path = unique_output_path(
+                    clip_output_path(
+                        video.path,
+                        crop_index=ci if (many and regions) else None,
+                        trim_index=ti if (many and trims) else None,
+                        container=settings.container,
+                        output_dir=output_dir,
+                        stem=stem,
+                    ),
+                    taken,
+                )
+                taken.add(output_path)
+                # Resolve the trim to ffmpeg seconds now; its duration drives the
+                # progress bar, falling back to the full clip when untrimmed.
+                trim_secs: tuple[float, float] | None = None
+                duration = info.duration_seconds
+                if trim is not None and info.fps > 0:
+                    trim_secs = trim.to_seconds(info.fps)
+                    duration = trim_secs[1]
+                job = ClipJob(
+                    output_path=output_path,
+                    duration_seconds=duration,
+                    input_path=video.path,
+                    region=region,
+                    settings=settings,
+                    trim=trim_secs,
+                )
+                self._queue.submit(job)
+                count += 1
+        editor.confirm_queued(count)

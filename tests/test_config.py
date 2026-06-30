@@ -11,7 +11,7 @@ from croppy.config import (
     save_parallel_enabled,
 )
 from croppy.logging import DEFAULT_LEVEL
-from croppy.models import EncodeSettings
+from croppy.models import DEFAULT_APPLIED, EncodeSettings
 
 
 def test_load_returns_defaults_when_empty() -> None:
@@ -26,15 +26,25 @@ def test_encode_settings_roundtrip() -> None:
         nvenc_preset="p5",
         preset="slow",
         crf=23,
-        tune="film",
         pixel_format="yuv444p",
-        audio_mode="aac",
         audio_bitrate="256k",
         faststart=False,
         preserve_created_time=False,
+        applied=DEFAULT_APPLIED | {"fps", "audio"},
     )
     save_encode_settings(custom)
     assert load_encode_settings() == custom
+
+
+def test_applied_missing_falls_back_to_default() -> None:
+    # A config written before per-setting toggles has no "applied" key; loading
+    # it should assume the historical always-on behaviour.
+    save_encode_settings(EncodeSettings(crf=30))
+    from PySide6.QtCore import QSettings
+
+    store = QSettings()
+    store.remove("encode/applied")
+    assert load_encode_settings().applied == DEFAULT_APPLIED
 
 
 def test_parallel_enabled_defaults_off() -> None:

@@ -6,7 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import croppy.ffmpeg.encoder as enc
-from croppy.ffmpeg.crop import build_crop_command
+from croppy.ffmpeg.clip import build_clip_command
 from croppy.ffmpeg.encoder import encoder_args, resolve_encoder
 from croppy.models import CropRegion, EncodeSettings
 
@@ -89,7 +89,7 @@ def test_encoder_args_cpu(monkeypatch) -> None:
 
 def test_crop_omits_hwaccel_output_format_even_with_nvenc(monkeypatch) -> None:
     monkeypatch.setattr(enc, "nvenc_available", lambda: True)
-    cmd = build_crop_command(
+    cmd = build_clip_command(
         input_path=Path("in.mp4"),
         output_path=Path("out.mp4"),
         region=CropRegion(0, 0, 64, 64),

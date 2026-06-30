@@ -12,12 +12,14 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QImage
 from PySide6.QtWidgets import (
     QFileDialog,
+    QFrame,
     QGroupBox,
     QHBoxLayout,
     QLabel,
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QSplitter,
     QVBoxLayout,
@@ -32,7 +34,8 @@ from croppy.gui.crop_item import CropRectItem
 from croppy.gui.landing import file_dialog_filter
 from croppy.gui.output_picker import OutputFolderPicker
 from croppy.gui.status_flash import StatusFlash, queued_message
-from croppy.models import CropRegion, EncodeSettings
+from croppy.gui.trim_panel import TrimPanel
+from croppy.models import CropRegion, EncodeSettings, Trim
 
 
 class EditorWidget(QWidget):
@@ -92,11 +95,16 @@ class EditorWidget(QWidget):
         )
         if not self.output_picker.has_dir():
             self.output_picker.set_output_dir(info.path.parent)
+        # Seed the output name from the source; the user can rename it. The crop/
+        # trim suffix (and extension) are still derived at queue time.
+        self.output_picker.set_filename(info.path.stem)
 
         self.frame_spin.setMaximum(info.nb_frames or 1_000_000_000)
         self.frame_spin.setValue(1)
         self.frame_spin.setEnabled(True)
         self.reload_btn.setEnabled(True)
+        # Trims belong to the old clip too — rebind the panel to this one.
+        self.trim.configure(info.fps, info.nb_frames)
         self._refresh_crops()
 
     def set_image(self, image: QImage) -> None:
@@ -119,6 +127,10 @@ class EditorWidget(QWidget):
             for item in self.canvas.crops()
         ]
 
+    def trims(self) -> list[Trim]:
+        """Temporal trims declared in the Trim panel (empty = whole video)."""
+        return self.trim.trims() if self._info is not None else []
+
     def encode_settings(self) -> EncodeSettings:
         return self.compression.settings()
 
@@ -127,6 +139,10 @@ class EditorWidget(QWidget):
 
     def set_output_dir(self, path: Path) -> None:
         self.output_picker.set_output_dir(path)
+
+    def output_name(self) -> str:
+        """User-chosen base name for outputs (empty falls back to the source)."""
+        return self.output_picker.filename()
 
     # --- UI -----------------------------------------------------------------
 
@@ -155,11 +171,32 @@ class EditorWidget(QWidget):
         side = QWidget(parent)
         self._sidebar = side
         side.setMinimumWidth(280)
-        v = QVBoxLayout(side)
+        # The controls live in a scroll area so a tall sidebar (crops + trims +
+        # encoding) never forces the window past the screen height; the queue
+        # button is pinned below the scroll area so it stays reachable.
+        outer = QVBoxLayout(side)
         # Top inset matches the other columns' header height so the summary lines
         # up with the video list box rather than the title above it.
-        v.setContentsMargins(PANEL_MARGIN, PANEL_HEADER_HEIGHT, PANEL_MARGIN, PANEL_MARGIN)
+        outer.setContentsMargins(PANEL_MARGIN, PANEL_HEADER_HEIGHT, PANEL_MARGIN, PANEL_MARGIN)
+        outer.setSpacing(12)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.viewport().setAutoFillBackground(False)
+        outer.addWidget(scroll, 1)
+        gutter = scroll.verticalScrollBar().sizeHint().width() or 16
+
+        controls = QWidget()
+        controls.setAutoFillBackground(False)
+        v = QVBoxLayout(controls)
+        # Reserve the scrollbar's width as a right margin so no control's right
+        # edge (e.g. the output Basename field) hides under the vertical
+        # scrollbar — including styles that draw it as an overlay.
+        v.setContentsMargins(0, 0, gutter, 0)
         v.setSpacing(12)
+        scroll.setWidget(controls)
 
         self.summary = QLabel("No video loaded — drop one on the canvas or click to browse.")
         self.summary.setWordWrap(True)
@@ -170,7 +207,15 @@ class EditorWidget(QWidget):
         self.summary.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         v.addWidget(self.summary)
 
-        self.output_picker = OutputFolderPicker()
+        self.output_picker = OutputFolderPicker(
+            with_filename=True,
+            filename_label="Basename",
+            filename_tooltip=(
+                "Base name for the output file(s). When a clip produces more than one "
+                "output, a _crop/_trim suffix is appended; the file extension is added "
+                "automatically."
+            ),
+        )
         v.addWidget(self.output_picker)
 
         frame_group = QGroupBox("Preview frame")
@@ -191,12 +236,17 @@ class EditorWidget(QWidget):
         cl = QVBoxLayout(crops_group)
         self.crops_list = QListWidget()
         self.crops_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
+        self.crops_list.setMaximumHeight(150)
         self.empty_label = QLabel("Click-and-drag on the frame to draw a crop.")
         self.empty_label.setStyleSheet("color: #888;")
         self.empty_label.setWordWrap(True)
         cl.addWidget(self.crops_list)
         cl.addWidget(self.empty_label)
         v.addWidget(crops_group)
+
+        self.trim = TrimPanel(current_frame_provider=lambda: self.frame_spin.value())
+        self.trim.trims_changed.connect(self._update_queue_state)
+        v.addWidget(self.trim)
 
         self.compression = CompressionPanel(
             initial=self._controller.default(), controller=self._controller
@@ -205,13 +255,24 @@ class EditorWidget(QWidget):
 
         v.addStretch(1)
 
+        # Pinned below the scroll area so it's always reachable, however tall the
+        # controls above grow.
         self.process_btn = QPushButton("Add Job to Queue")
         self.process_btn.setEnabled(False)
         self.process_btn.clicked.connect(self.process_requested)
-        v.addWidget(self.process_btn)
+        outer.addWidget(self.process_btn)
 
         self.queued_flash = StatusFlash()
-        v.addWidget(self.queued_flash)
+        outer.addWidget(self.queued_flash)
+
+        # A QScrollArea doesn't propagate its inner widget's preferred width, so
+        # without this the splitter would shrink the panel below what the controls
+        # need and the vertical scrollbar's gutter would clip the right-hand
+        # buttons (Add trim / Reload / Browse). Claim the controls' width (which
+        # already includes the right-margin gutter) plus the space the scrollbar
+        # takes, so everything is visible at the default panel width.
+        needed = controls.minimumSizeHint().width() + gutter + 2 * PANEL_MARGIN
+        side.setMinimumWidth(max(280, needed))
 
         return side
 
@@ -241,7 +302,21 @@ class EditorWidget(QWidget):
         empty = len(items) == 0
         self.crops_list.setVisible(not empty)
         self.empty_label.setVisible(empty)
-        self.process_btn.setEnabled(not empty)
+        self._update_queue_state()
+
+    def _update_queue_state(self) -> None:
+        """Reflect the crop × trim output count on the queue button.
+
+        Outputs = (#crops or 1) × (#trims or 1), but only when at least one of
+        the two is non-empty — with neither, there is nothing to export.
+        """
+        n_crops = len(self.canvas.crops())
+        n_trims = len(self.trim.trims())
+        outputs = 0 if (n_crops == 0 and n_trims == 0) else (n_crops or 1) * (n_trims or 1)
+        self.process_btn.setEnabled(outputs > 0)
+        self.process_btn.setText(
+            "Add Job to Queue" if outputs <= 1 else f"Add {outputs} Jobs to Queue"
+        )
 
     def _on_canvas_selection(self, item: CropRectItem | None) -> None:
         if self._syncing_selection:

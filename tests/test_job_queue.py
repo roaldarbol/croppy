@@ -6,21 +6,21 @@ from pathlib import Path
 
 import pytest
 
-from croppy.ffmpeg.crop import default_output_path
+from croppy.ffmpeg.clip import default_output_path
 from croppy.ffmpeg.probe import probe
-from croppy.jobs.job import CombineJob, CropJob, JobState
+from croppy.jobs.job import ClipJob, CombineJob, JobState
 from croppy.jobs.queue import JobQueue, suggested_worker_count
 from croppy.models import CropRegion, EncodeSettings
 
 
-def _make_job(input_path: Path, output_path: Path, duration: float = 2.0) -> CropJob:
-    return CropJob(
+def _make_job(input_path: Path, output_path: Path, duration: float = 2.0) -> ClipJob:
+    return ClipJob(
         input_path=input_path,
         output_path=output_path,
         region=CropRegion(0, 0, 160, 120),
         # Pin a CPU encoder so these real-ffmpeg runs don't depend on a working
         # GPU. CI builds can expose hevc_nvenc without a usable NVENC device.
-        settings=EncodeSettings(encoder="libx264", preset="ultrafast", audio_mode="copy"),
+        settings=EncodeSettings(encoder="libx264", preset="ultrafast"),
         duration_seconds=duration,
     )
 
@@ -50,7 +50,7 @@ def test_combine_job_produces_indexed_output(qtbot, qapp, test_video: Path, tmp_
         output_path=out,
         duration_seconds=4.0,
         inputs=[test_video, test_video],
-        settings=EncodeSettings(encoder="libx264", preset="ultrafast", audio_mode="copy"),
+        settings=EncodeSettings(encoder="libx264", preset="ultrafast"),
     )
     queue = JobQueue()
     with qtbot.waitSignal(queue.job_finished, timeout=60000):
@@ -229,7 +229,7 @@ def test_default_output_path_template(tmp_path: Path) -> None:
     assert default_output_path(tmp_path / "vid.mp4", 0) == tmp_path / "vid_crop1.mp4"
 
 
-def test_cropjob_fraction_clamped() -> None:
+def test_clipjob_fraction_clamped() -> None:
     job = _make_job(Path("/tmp/in.mp4"), Path("/tmp/out.mp4"), duration=2.0)
     assert job.fraction() == 0.0
     job.progress_us = 1_000_000
