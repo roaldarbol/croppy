@@ -104,10 +104,18 @@ class TrimPanel(QGroupBox):
         self._end_edit = QLineEdit()
         grid.addWidget(QLabel("Start"), 0, 0)
         grid.addWidget(self._start_edit, 0, 1)
-        grid.addWidget(self._grab_button(self._start_edit), 0, 2)
+        grid.addWidget(
+            self._grab_button(self._start_edit, last=False, tip="Use the current preview frame"),
+            0,
+            2,
+        )
         grid.addWidget(QLabel("End"), 1, 0)
         grid.addWidget(self._end_edit, 1, 1)
-        grid.addWidget(self._grab_button(self._end_edit), 1, 2)
+        grid.addWidget(
+            self._grab_button(self._end_edit, last=True, tip="Set to the last frame"),
+            1,
+            2,
+        )
         grid.setColumnStretch(1, 1)
         v.addLayout(grid)
 
@@ -146,11 +154,11 @@ class TrimPanel(QGroupBox):
 
         self._sync_unit_placeholders()
 
-    def _grab_button(self, target: QLineEdit) -> QToolButton:
+    def _grab_button(self, target: QLineEdit, *, last: bool, tip: str) -> QToolButton:
         btn = QToolButton()
         btn.setText("⤓")
-        btn.setToolTip("Use the current preview frame")
-        btn.clicked.connect(lambda: self._grab_into(target))
+        btn.setToolTip(tip)
+        btn.clicked.connect(lambda: self._grab_into(target, last=last))
         return btn
 
     # --- helpers ------------------------------------------------------------
@@ -162,8 +170,12 @@ class TrimPanel(QGroupBox):
     def _format_frame(self, frame: int) -> str:
         return str(frame) if self._unit_frames else frame_to_timecode(frame, self._fps)
 
-    def _grab_into(self, target: QLineEdit) -> None:
-        target.setText(self._format_frame(self._get_current_frame()))
+    def _grab_into(self, target: QLineEdit, *, last: bool) -> None:
+        # "End" grabs the last frame (a trim usually runs *to* the end); "Start"
+        # grabs whatever the preview is currently showing. With an unknown frame
+        # count, fall back to the preview frame.
+        frame = self._nb_frames if last and self._nb_frames else self._get_current_frame()
+        target.setText(self._format_frame(frame))
         self._set_error("")
 
     def _parse_field(self, text: str) -> int | None:
