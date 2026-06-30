@@ -5,12 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from croppy.jobs import job as job_module
-from croppy.jobs.job import CombineJob, CompressJob, CropJob
+from croppy.jobs.job import ClipJob, CombineJob, CompressJob
 from croppy.models import CropRegion, EncodeSettings
 
 
-def _crop(output: Path) -> CropJob:
-    return CropJob(
+def _crop(output: Path) -> ClipJob:
+    return ClipJob(
         output_path=output,
         duration_seconds=1.0,
         input_path=Path("in.mp4"),

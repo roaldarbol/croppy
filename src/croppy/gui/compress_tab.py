@@ -23,8 +23,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from croppy.ffmpeg.clip import unique_output_path
 from croppy.ffmpeg.compress import default_compress_output_path
-from croppy.ffmpeg.crop import unique_output_path
 from croppy.ffmpeg.probe import ProbeError, probe
 from croppy.gui.compression_panel import (
     CompressionController,

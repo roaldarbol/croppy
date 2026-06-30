@@ -181,7 +181,7 @@ class SettingsPanel(QWidget):
         self.pixfmt_combo = QComboBox()
         self.pixfmt_combo.addItems(PIXEL_FORMATS)
         add_row(
-            "CPU pixel format:",
+            "Pixel format:",
             self.pixfmt_combo,
             "How colour is stored. Leave as yuv420p — it plays everywhere.\n"
             "422/444 keep more colour detail but some players can't open them.",
@@ -222,7 +222,10 @@ class SettingsPanel(QWidget):
             "192k suits most videos. (Only used when Audio is 'aac'.)",
         )
 
-        self.faststart_check = QCheckBox("Move metadata to front (mp4/mov)")
+        # No checkbox text: the row label names it and the long description lives
+        # in the tooltip. A checkbox can't elide, so its text would otherwise pin
+        # the form's minimum width and make the whole sidebar too wide.
+        self.faststart_check = QCheckBox()
         add_row(
             "Faststart:",
             self.faststart_check,
@@ -230,7 +233,7 @@ class SettingsPanel(QWidget):
             "downloaded. Useful for mp4/mov shared online.",
         )
 
-        self.preserve_ctime_check = QCheckBox("Copy the source's creation date (Windows)")
+        self.preserve_ctime_check = QCheckBox()
         add_row(
             "Creation date:",
             self.preserve_ctime_check,
@@ -254,9 +257,15 @@ class SettingsPanel(QWidget):
             self.audio_combo,
             self.audio_bitrate_combo,
         ):
-            field.setMinimumWidth(150)
-            field.setMaximumWidth(240)
+            field.setMinimumWidth(130)
+            field.setMaximumWidth(210)
             field.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            # Keep a long current item (e.g. the encoder names) from pinning the
+            # field column to its full text width — let it elide within the band.
+            if isinstance(field, QComboBox):
+                field.setSizeAdjustPolicy(
+                    QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+                )
 
         self.set_settings(initial)
         self._update_dependent_enabled()

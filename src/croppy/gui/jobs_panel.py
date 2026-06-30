@@ -29,7 +29,7 @@ from croppy.jobs.queue import JobQueue, suggested_worker_count
 _FINISHED_STATES = frozenset({JobState.DONE, JobState.FAILED, JobState.CANCELED})
 
 _KIND_COLORS = {
-    "crop": "#4a9eff",
+    "clip": "#4a9eff",
     "combine": "#9a6cff",
     "compress": "#2bb673",
 }

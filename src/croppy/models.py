@@ -46,6 +46,44 @@ class CropRegion:
 
 
 @dataclass(frozen=True)
+class Trim:
+    """A temporal segment of the source, as a 1-based *inclusive* frame range.
+
+    Frames are the canonical unit so a trim is independent of any float-seconds
+    rounding and lines up with the editor's preview-frame picker (frame 1 is the
+    first frame). The ffmpeg ``-ss``/``-t`` pair is resolved from the clip's fps
+    only at submit time via :meth:`to_seconds`.
+    """
+
+    start_frame: int
+    end_frame: int
+
+    @property
+    def n_frames(self) -> int:
+        """Number of frames covered (inclusive of both ends; always >= 1)."""
+        return max(1, self.end_frame - self.start_frame + 1)
+
+    def to_seconds(self, fps: float) -> tuple[float, float]:
+        """Return ``(start_seconds, duration_seconds)`` for ffmpeg ``-ss``/``-t``.
+
+        ``start`` is the in-frame's timestamp ``(start_frame - 1) / fps``;
+        ``duration`` spans the inclusive frame count, so a 1-frame trim lasts
+        ``1 / fps``. Raises if ``fps`` is non-positive (can't resolve a time).
+        """
+        if fps <= 0:
+            raise ValueError("fps must be positive to resolve a trim to seconds")
+        start = (self.start_frame - 1) / fps
+        duration = self.n_frames / fps
+        return start, duration
+
+    def clamped(self, nb_frames: int) -> Trim:
+        """Return a copy with both ends inside ``[1, nb_frames]`` and start <= end."""
+        start = max(1, min(self.start_frame, nb_frames))
+        end = max(start, min(self.end_frame, nb_frames))
+        return Trim(start_frame=start, end_frame=end)
+
+
+@dataclass(frozen=True)
 class EncodeSettings:
     """Encoding parameters for ffmpeg output. Defaults aim for a good
     quality/size compromise; everything is overridable from the settings panel.
