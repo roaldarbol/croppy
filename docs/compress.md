@@ -29,7 +29,7 @@ rows applies folder and encoding changes to all of them at once.
 - **Encoding** — see [Encoding & presets](encoding.md).
 
 !!! tip "Compare variants"
-    Duplicate a row, give the copy a different CRF/CQ (or a different name), and
+    Duplicate a row, give the copy a different quality (CRF/CQ) or name, and
     queue both. Croppy auto-numbers any output that would clash, so nothing gets
     overwritten.
 

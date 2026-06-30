@@ -38,5 +38,5 @@ is kept afterwards so you can tweak and re-queue it. Jobs land on the
 
 !!! note "Encoding is inherited where it can be"
     Combine always writes mp4. If you leave the **Encoder** unset (Match source),
-    Croppy re-encodes with the first clip's codec family. See
+    Croppy re-encodes using the same kind of codec as the first clip. See
     [Encoding & presets](encoding.md).

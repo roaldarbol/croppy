@@ -33,8 +33,9 @@ The buttons at the top flip every row at once:
 ## The settings
 
 - **Container** — `mp4` (plays everywhere), `mkv`, or `mov`.
-- **Encoder** — **Auto** uses your GPU (NVENC HEVC) when available and falls back
-  to CPU **libx265**; you can also force NVENC, libx265, or libx264.
+- **Encoder** — how the video is compressed. **Auto** uses your **graphics card**
+  when it can (faster) and the **CPU** otherwise; you can also force GPU
+  (**NVENC HEVC**) or CPU (**libx265** / **libx264**).
 
 === "GPU (NVENC)"
 

@@ -45,8 +45,8 @@ one progress strip along the bottom you can watch and cancel from:
   strip at the bottom always shows what's happening, from whichever tab you're on.
 - **Encoding is per item.** The **Settings** tab holds the default; everything you
   queue carries its own copy, so you can queue the same video twice with small
-  differences and compare. By default Croppy uses **NVENC HEVC on the GPU when
-  it's available** and falls back to CPU **libx265** otherwise.
+  differences and compare. By default Croppy encodes on your **graphics card**
+  when it can — which is much faster — and on the **CPU** otherwise.
 - **Apply only what you mean to.** Every encoding setting can be left to inherit
   from the source instead of being forced — see [Encoding & presets](encoding.md).
 - **You name the output.** Every tab shows a sensible default name and lets you

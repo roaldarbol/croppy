@@ -39,9 +39,9 @@ happening — counts and progress — from whichever tab you're on.
 
 ### Running several at once
 
-The **Parallel** toggle on the Jobs tab runs multiple jobs concurrently — useful
-for keeping an NVENC GPU's encode engines busy, or churning through a batch of CPU
-compresses on a many-core machine.
+The **Parallel** toggle on the Jobs tab runs several jobs at once — useful for
+keeping a **graphics card** busy, or churning through a batch of CPU jobs on a
+many-core machine.
 
 !!! note "Same source, different settings"
     Because each queued job carries its own encoding and output name, you can

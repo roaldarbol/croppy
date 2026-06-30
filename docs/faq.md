@@ -15,10 +15,10 @@ frame, since trims usually run to the end.
 
 ### Does it use my GPU?
 
-By default the encoder is **Auto**: it uses **NVENC HEVC** on an NVIDIA GPU when
-one is available and falls back to CPU **libx265** otherwise. You can force GPU or
-CPU in the [Encoding panel](encoding.md). The **Parallel** toggle (Jobs tab) keeps
-multiple encode engines busy.
+By default the **Encoder** is set to **Auto**: it encodes on your **NVIDIA
+graphics card (GPU)** when you have one — much faster — and on the **CPU**
+otherwise. You can force GPU or CPU in the [Encoding panel](encoding.md). The
+**Parallel** toggle (Jobs tab) keeps several encodes running at once.
 
 ### Will it overwrite my files?
 
