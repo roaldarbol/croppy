@@ -1,0 +1,69 @@
+[project]
+site_name = "croppy"
+site_description = "Common lab video chores — cropping, trimming, joining, and compressing — in one window."
+site_author = "Mikkel Roald-Arbøl"
+site_url = "https://roaldarbol.github.io/croppy/"
+repo_url = "https://github.com/roaldarbol/croppy"
+repo_name = "roaldarbol/croppy"
+copyright = "Copyright &copy; Mikkel Roald-Arbøl — MIT licensed"
+
+nav = [
+  { "Home" = "index.md" },
+  { "Install & launch" = "install.md" },
+  { "The Clip tab" = "clip.md" },
+  { "The Compress tab" = "compress.md" },
+  { "The Combine tab" = "combine.md" },
+  { "Encoding & presets" = "encoding.md" },
+  { "Output names & the Jobs queue" = "output-and-jobs.md" },
+  { "Tips & FAQ" = "faq.md" },
+]
+
+[project.theme]
+language = "en"
+features = [
+  "content.code.copy",
+  "navigation.instant",
+  "navigation.instant.progress",
+  "navigation.sections",
+  "navigation.top",
+  "navigation.tracking",
+  "navigation.footer",
+  "search.highlight",
+  "search.suggest",
+  "toc.follow",
+]
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+primary = "deep purple"
+accent = "deep purple"
+toggle.icon = "material/weather-night"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+primary = "deep purple"
+accent = "purple"
+toggle.icon = "material/weather-sunny"
+toggle.name = "Switch to light mode"
+
+[project.markdown_extensions.admonition]
+[project.markdown_extensions.attr_list]
+[project.markdown_extensions.md_in_html]
+[project.markdown_extensions.tables]
+
+[project.markdown_extensions.pymdownx.details]
+
+[project.markdown_extensions.pymdownx.highlight]
+anchor_linenums = true
+
+[project.markdown_extensions.pymdownx.inlinehilite]
+
+[project.markdown_extensions.pymdownx.superfences]
+
+[project.markdown_extensions.pymdownx.tabbed]
+alternate_style = true
+
+[project.markdown_extensions.pymdownx.emoji]

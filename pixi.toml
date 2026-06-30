@@ -30,6 +30,18 @@ ruff = ">=0.6"
 lefthook = ">=1.7"
 python-build = ">=1.0"
 
+# Documentation site (Zensical) + the screenshot generator. The docs environment
+# also gets croppy's own deps (the default feature is always included), so the
+# screenshot script can drive the real widgets headlessly.
+[feature.docs.pypi-dependencies]
+zensical = ">=0.0.46"
+
+[feature.docs.tasks]
+docs = { cmd = "zensical serve", description = "Serve the docs site locally with live reload." }
+docs-build = { cmd = "zensical build", description = "Build the static docs site into ./site/." }
+screenshots = { cmd = "python scripts/screenshots.py", description = "Regenerate the docs screenshots (light + dark)." }
+
 [environments]
 default = { solve-group = "default" }
 dev = { features = ["dev"], solve-group = "default" }
+docs = { features = ["docs"], solve-group = "default" }

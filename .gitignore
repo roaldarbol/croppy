@@ -29,5 +29,8 @@ Thumbs.db
 # Logs
 *.log
 
+# Docs site build output (Zensical)
+/site/
+
 # Other 
 .claude
