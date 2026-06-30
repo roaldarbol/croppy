@@ -29,8 +29,9 @@ Thumbs.db
 # Logs
 *.log
 
-# Docs site build output (Zensical)
+# Docs site build output (Zensical) + its internal uv lockfile
 /site/
+/uv.lock
 
 # Other 
 .claude

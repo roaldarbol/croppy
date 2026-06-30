@@ -1,8 +1,5 @@
 # Install & launch
 
-Croppy needs **ffmpeg** to do the actual work. The install methods below bring it
-along automatically — you don't have to install ffmpeg separately.
-
 ## Recommended: `pixi global`
 
 Install Croppy as a global command-line app with [pixi](https://pixi.sh), from
@@ -12,25 +9,9 @@ the `sleeb-forge` channel (until it lands on conda-forge):
 pixi global install croppy -c https://prefix.dev/sleeb-forge
 ```
 
-That puts a `croppy` command on your `PATH`, with its own isolated environment
-(Python, Qt, ffmpeg) — nothing else to set up.
-
 !!! note "Coming to conda-forge"
     Croppy is on its way to **conda-forge**. Once it lands you'll be able to
     `pixi add croppy` or `conda install -c conda-forge croppy`.
-
-## From a checkout
-
-To run the latest from source (also handy for hacking on it):
-
-```bash
-git clone https://github.com/roaldarbol/croppy
-cd croppy
-pixi run croppy
-```
-
-`pixi run croppy` sets up an isolated environment the first time and launches the
-app.
 
 ## Launching
 
@@ -53,7 +34,6 @@ croppy                    # opens on the Clip tab — drop a video or click to b
 croppy path/to/clip.mp4   # opens straight into the Clip editor with that clip
 ```
 
-!!! note "Requirements"
-    A working `ffmpeg`/`ffprobe` (the install methods above provide both). A
-    recent NVIDIA GPU is optional — Croppy uses it for faster encoding when it's
-    there and falls back to the CPU when it isn't.
+!!! tip "GPU is optional"
+    A recent NVIDIA GPU lets Croppy encode faster (NVENC). Without one it simply
+    uses the CPU instead.

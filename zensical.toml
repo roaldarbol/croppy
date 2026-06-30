@@ -16,6 +16,7 @@ nav = [
   { "Encoding & presets" = "encoding.md" },
   { "Output & jobs" = "output-and-jobs.md" },
   { "FAQ" = "faq.md" },
+  { "Credits" = "credits.md" },
 ]
 
 [project.theme]
