@@ -26,19 +26,25 @@ from croppy.models import EncodeSettings
 def summarize_settings(settings: EncodeSettings) -> str:
     """A compact one-line description, e.g. ``Auto · cq 28 · mp4``.
 
-    When frame-rate downsampling is active it is appended, e.g. ``… · mp4 · 10fps``.
+    Only *applied* settings are shown; disabled ones are inherited from the source
+    and omitted. Frame-rate downsampling, when active, is appended (``… · 10fps``).
     """
-    if settings.encoder in ("auto", "nvenc_hevc"):
-        enc = "Auto" if settings.encoder == "auto" else "HEVC"
-        quality = f"cq {settings.cq}"
-    else:
-        enc = "x265" if settings.encoder == "libx265" else "x264"
-        quality = f"crf {settings.crf}"
-    summary = f"{enc} · {quality} · {settings.container}"
-    if settings.fps > 0:
+    parts: list[str] = []
+    if settings.is_on("encoder"):
+        if settings.encoder in ("auto", "nvenc_hevc"):
+            parts.append("Auto" if settings.encoder == "auto" else "HEVC")
+            if settings.is_on("cq"):
+                parts.append(f"cq {settings.cq}")
+        else:
+            parts.append("x265" if settings.encoder == "libx265" else "x264")
+            if settings.is_on("crf"):
+                parts.append(f"crf {settings.crf}")
+    if settings.is_on("container"):
+        parts.append(settings.container)
+    if settings.is_on("fps") and settings.fps > 0:
         fps = int(settings.fps) if float(settings.fps).is_integer() else settings.fps
-        summary += f" · {fps}fps"
-    return summary
+        parts.append(f"{fps}fps")
+    return " · ".join(parts) if parts else "Match source"
 
 
 class CompressionController(QObject):

@@ -288,11 +288,18 @@ class CombineTab(QWidget):
         if stem.lower().endswith(".mp4"):
             stem = stem[:-4]
         output_path = unique_output_path(group.output_dir / f"{stem}.mp4", taken)
+        # Combine always writes mp4; only the encoder can be source-inherited, so
+        # resolve it against the first clip (matching the created-date convention).
+        try:
+            settings = group.settings.for_source(codec=probe(paths[0]).codec, container="mp4")
+        except ProbeError as exc:
+            logger.warning("Could not probe {} before combining: {}", paths[0], exc)
+            settings = group.settings
         job = CombineJob(
             output_path=output_path,
             duration_seconds=_total_duration(paths),
             inputs=paths,
-            settings=group.settings,
+            settings=settings,
         )
         self._queue.submit(job)
         self.queued_flash.flash(queued_message(1))

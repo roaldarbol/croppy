@@ -38,5 +38,23 @@ def test_encode_settings_defaults() -> None:
     s = EncodeSettings()
     assert s.crf == 18
     assert s.preset == "medium"
-    assert s.audio_mode == "copy"
     assert s.container == "mp4"
+    # Audio defaults to stream-copy: the "audio" override is off.
+    assert not s.is_on("audio")
+    assert s.audio_bitrate == "192k"
+
+
+def test_for_source_inherits_container_and_encoder_when_off() -> None:
+    s = EncodeSettings(applied=frozenset())  # everything inherited
+    resolved = s.for_source(codec="hevc", container="mkv")
+    assert resolved.container == "mkv"
+    assert resolved.encoder == "libx265"
+    resolved_h264 = s.for_source(codec="h264", container="mov")
+    assert resolved_h264.encoder == "libx264"
+
+
+def test_for_source_keeps_applied_values() -> None:
+    s = EncodeSettings(container="mp4", encoder="nvenc_hevc")  # both applied by default
+    resolved = s.for_source(codec="hevc", container="mkv")
+    assert resolved.container == "mp4"
+    assert resolved.encoder == "nvenc_hevc"

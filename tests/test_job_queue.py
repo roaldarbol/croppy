@@ -20,7 +20,7 @@ def _make_job(input_path: Path, output_path: Path, duration: float = 2.0) -> Cli
         region=CropRegion(0, 0, 160, 120),
         # Pin a CPU encoder so these real-ffmpeg runs don't depend on a working
         # GPU. CI builds can expose hevc_nvenc without a usable NVENC device.
-        settings=EncodeSettings(encoder="libx264", preset="ultrafast", audio_mode="copy"),
+        settings=EncodeSettings(encoder="libx264", preset="ultrafast"),
         duration_seconds=duration,
     )
 
@@ -50,7 +50,7 @@ def test_combine_job_produces_indexed_output(qtbot, qapp, test_video: Path, tmp_
         output_path=out,
         duration_seconds=4.0,
         inputs=[test_video, test_video],
-        settings=EncodeSettings(encoder="libx264", preset="ultrafast", audio_mode="copy"),
+        settings=EncodeSettings(encoder="libx264", preset="ultrafast"),
     )
     queue = JobQueue()
     with qtbot.waitSignal(queue.job_finished, timeout=60000):

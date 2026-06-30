@@ -40,14 +40,6 @@ from croppy.jobs.queue import JobQueue
 from croppy.models import EncodeSettings
 
 
-def _duration(path: Path) -> float:
-    try:
-        return probe(path).duration_seconds
-    except ProbeError as exc:
-        logger.warning("Could not probe {} for duration: {}", path, exc)
-        return 0.0
-
-
 @dataclass
 class _ItemConfig:
     """Per-video compress configuration carried by each row."""
@@ -203,16 +195,27 @@ class CompressTab(QWidget):
         for row in rows:
             path = paths[row]
             cfg = self._item_config(row)
+            # One probe for both duration and source-inherited container/encoder.
+            try:
+                info = probe(path)
+                duration = info.duration_seconds
+                settings = cfg.settings.for_source(
+                    codec=info.codec, container=path.suffix.lstrip(".").lower()
+                )
+            except ProbeError as exc:
+                logger.warning("Could not probe {} before queueing: {}", path, exc)
+                duration = 0.0
+                settings = cfg.settings
             base = default_compress_output_path(
-                path, container=cfg.settings.container, output_dir=cfg.output_dir
+                path, container=settings.container, output_dir=cfg.output_dir
             )
             output_path = unique_output_path(base, taken)
             taken.add(output_path)
             job = CompressJob(
                 output_path=output_path,
-                duration_seconds=_duration(path),
+                duration_seconds=duration,
                 input_path=path,
-                settings=cfg.settings,
+                settings=settings,
             )
             self._queue.submit(job)
         self.queued_flash.flash(queued_message(len(rows)))

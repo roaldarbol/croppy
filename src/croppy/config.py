@@ -12,7 +12,7 @@ from dataclasses import fields
 from PySide6.QtCore import QSettings
 
 from croppy.logging import DEFAULT_LEVEL, LEVELS
-from croppy.models import EncodeSettings
+from croppy.models import DEFAULT_APPLIED, EncodeSettings
 
 _ENCODE_GROUP = "encode"
 _PARALLEL_KEY = "processing/parallel_enabled"
@@ -27,6 +27,9 @@ def load_encode_settings() -> EncodeSettings:
     defaults = EncodeSettings()
     values: dict[str, object] = {}
     for field in fields(EncodeSettings):
+        if field.name == "applied":
+            values["applied"] = _load_applied(store)
+            continue
         default = getattr(defaults, field.name)
         # bool must be checked before int: bool is a subclass of int.
         py_type = bool if isinstance(default, bool) else type(default)
@@ -35,12 +38,29 @@ def load_encode_settings() -> EncodeSettings:
     return EncodeSettings(**values)
 
 
+def _load_applied(store: QSettings) -> frozenset[str]:
+    """Read the ``applied`` set (stored as a string list); missing → default.
+
+    A missing key means a config written before per-setting toggles existed, so
+    we fall back to :data:`DEFAULT_APPLIED` (the historical always-on behaviour).
+    """
+    stored = store.value("applied", None)
+    if stored is None:
+        return DEFAULT_APPLIED
+    if isinstance(stored, str):  # a single-element list comes back as a bare str
+        return frozenset({stored})
+    return frozenset(str(k) for k in stored)
+
+
 def save_encode_settings(settings: EncodeSettings) -> None:
     """Persist encoding settings so they are restored on the next launch."""
     store = QSettings()
     store.beginGroup(_ENCODE_GROUP)
     for field in fields(EncodeSettings):
-        store.setValue(field.name, getattr(settings, field.name))
+        value = getattr(settings, field.name)
+        if field.name == "applied":
+            value = sorted(value)  # frozenset → a stable string list
+        store.setValue(field.name, value)
     store.endGroup()
 
 

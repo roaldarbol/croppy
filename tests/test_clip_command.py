@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from croppy.ffmpeg.clip import build_clip_command, clip_output_path, default_output_path
-from croppy.models import CropRegion, EncodeSettings, Trim
+from croppy.models import DEFAULT_APPLIED, CropRegion, EncodeSettings, Trim
 
 
 def test_basic_command_shape(tmp_path: Path) -> None:
@@ -34,8 +34,8 @@ def test_audio_copy_vs_aac(tmp_path: Path) -> None:
         output_path=tmp_path / "out.mp4",
         region=CropRegion(0, 0, 64, 64),
     )
-    copy = build_clip_command(**base, settings=EncodeSettings(audio_mode="copy"))
-    aac = build_clip_command(**base, settings=EncodeSettings(audio_mode="aac"))
+    copy = build_clip_command(**base, settings=EncodeSettings())  # audio off → copy
+    aac = build_clip_command(**base, settings=EncodeSettings(applied=DEFAULT_APPLIED | {"audio"}))
     assert copy[copy.index("-c:a") + 1] == "copy"
     assert aac[aac.index("-c:a") + 1] == "aac"
     assert "-b:a" in aac
@@ -48,9 +48,45 @@ def test_audio_bitrate_honored(tmp_path: Path) -> None:
         input_path=tmp_path / "in.mp4",
         output_path=tmp_path / "out.mp4",
         region=CropRegion(0, 0, 64, 64),
-        settings=EncodeSettings(audio_mode="aac", audio_bitrate="256k"),
+        settings=EncodeSettings(applied=DEFAULT_APPLIED | {"audio"}, audio_bitrate="256k"),
     )
     assert cmd[cmd.index("-b:a") + 1] == "256k"
+
+
+def test_disabled_settings_omit_their_flags(tmp_path: Path) -> None:
+    # Drop crf, preset and pixel_format from the applied set → none are emitted,
+    # so ffmpeg keeps the source pixel format and uses its own quality/preset.
+    settings = EncodeSettings(
+        encoder="libx264",
+        applied=frozenset({"container", "encoder"}),
+    )
+    cmd = build_clip_command(
+        input_path=tmp_path / "in.mp4",
+        output_path=tmp_path / "out.mp4",
+        region=CropRegion(0, 0, 64, 64),
+        settings=settings,
+    )
+    assert cmd[cmd.index("-c:v") + 1] == "libx264"
+    assert "-crf" not in cmd
+    assert "-preset" not in cmd
+    assert "-pix_fmt" not in cmd
+    assert cmd[cmd.index("-c:a") + 1] == "copy"  # audio off too
+
+
+def test_disabled_nvenc_quality_omits_cq_and_preset(tmp_path: Path) -> None:
+    settings = EncodeSettings(
+        encoder="nvenc_hevc",
+        applied=frozenset({"container", "encoder"}),
+    )
+    cmd = build_clip_command(
+        input_path=tmp_path / "in.mp4",
+        output_path=tmp_path / "out.mp4",
+        region=CropRegion(0, 0, 64, 64),
+        settings=settings,
+    )
+    assert cmd[cmd.index("-c:v") + 1] == "hevc_nvenc"
+    assert "-cq" not in cmd
+    assert "-preset" not in cmd
 
 
 def test_cpu_codec_honored(tmp_path: Path) -> None:
@@ -61,25 +97,6 @@ def test_cpu_codec_honored(tmp_path: Path) -> None:
         settings=EncodeSettings(encoder="libx265"),
     )
     assert cmd[cmd.index("-c:v") + 1] == "libx265"
-
-
-def test_tune_added_when_set(tmp_path: Path) -> None:
-    no_tune = build_clip_command(
-        input_path=tmp_path / "in.mp4",
-        output_path=tmp_path / "out.mp4",
-        region=CropRegion(0, 0, 64, 64),
-        settings=EncodeSettings(encoder="libx264", tune=""),
-    )
-    assert "-tune" not in no_tune
-
-    with_tune = build_clip_command(
-        input_path=tmp_path / "in.mp4",
-        output_path=tmp_path / "out.mp4",
-        region=CropRegion(0, 0, 64, 64),
-        settings=EncodeSettings(encoder="libx264", tune="film"),
-    )
-    assert "-tune" in with_tune
-    assert with_tune[with_tune.index("-tune") + 1] == "film"
 
 
 def test_pixel_format_honored(tmp_path: Path) -> None:
@@ -134,7 +151,7 @@ def test_fps_appended_to_crop_filter(tmp_path: Path) -> None:
         input_path=tmp_path / "in.mp4",
         output_path=tmp_path / "out.mp4",
         region=CropRegion(10, 20, 100, 80),
-        settings=EncodeSettings(fps=10),
+        settings=EncodeSettings(fps=10, applied=DEFAULT_APPLIED | {"fps"}),
     )
     # The fps filter chains onto the existing crop filter, comma-separated.
     assert cmd[cmd.index("-vf") + 1] == "crop=100:80:10:20,fps=10"
@@ -204,7 +221,7 @@ def test_region_none_keeps_fps_filter(tmp_path: Path) -> None:
         input_path=tmp_path / "in.mp4",
         output_path=tmp_path / "out.mp4",
         region=None,
-        settings=EncodeSettings(fps=10),
+        settings=EncodeSettings(fps=10, applied=DEFAULT_APPLIED | {"fps"}),
     )
     assert cmd[cmd.index("-vf") + 1] == "fps=10"
 

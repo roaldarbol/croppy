@@ -104,26 +104,19 @@ def encoder_args(
         # No -pix_fmt: with -hwaccel_output_format cuda the frames are a CUDA
         # format and forcing yuv420p on the output can make ffmpeg refuse the
         # conversion. NVENC picks an appropriate format itself.
-        output_args += [
-            "-c:v",
-            "hevc_nvenc",
-            "-preset",
-            settings.nvenc_preset,
-            "-cq",
-            str(settings.cq),
-        ]
+        output_args += ["-c:v", "hevc_nvenc"]
+        if settings.is_on("nvenc_preset"):
+            output_args += ["-preset", settings.nvenc_preset]
+        if settings.is_on("cq"):
+            output_args += ["-cq", str(settings.cq)]
     else:
-        output_args += [
-            "-c:v",
-            resolved,
-            "-crf",
-            str(settings.crf),
-            "-preset",
-            settings.preset,
-        ]
-        if settings.tune:
-            output_args += ["-tune", settings.tune]
-        output_args += ["-pix_fmt", settings.pixel_format]
+        output_args += ["-c:v", resolved]
+        if settings.is_on("crf"):
+            output_args += ["-crf", str(settings.crf)]
+        if settings.is_on("preset"):
+            output_args += ["-preset", settings.preset]
+        if settings.is_on("pixel_format"):
+            output_args += ["-pix_fmt", settings.pixel_format]
 
     return input_args, output_args
 
@@ -142,7 +135,7 @@ def fps_filter(settings: EncodeSettings) -> str | None:
     decode on the CPU (``allow_hwaccel_decode=False``) rather than keeping frames
     in VRAM.
     """
-    if settings.fps <= 0:
+    if not settings.is_on("fps") or settings.fps <= 0:
         return None
     value = settings.fps
     text = str(int(value)) if float(value).is_integer() else str(value)
@@ -150,10 +143,10 @@ def fps_filter(settings: EncodeSettings) -> str | None:
 
 
 def audio_args(settings: EncodeSettings) -> list[str]:
-    """``-c:a`` flags: stream-copy or re-encode to AAC."""
-    if settings.audio_mode == "copy":
-        return ["-c:a", "copy"]
-    return ["-c:a", "aac", "-b:a", settings.audio_bitrate]
+    """``-c:a`` flags: re-encode to AAC when "audio" is applied, else stream-copy."""
+    if settings.is_on("audio"):
+        return ["-c:a", "aac", "-b:a", settings.audio_bitrate]
+    return ["-c:a", "copy"]
 
 
 def faststart_args(settings: EncodeSettings) -> list[str]:

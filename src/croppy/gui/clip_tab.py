@@ -282,8 +282,12 @@ class ClipTab(QWidget):
         trims = editor.trims()
         if not regions and not trims:
             return
-        settings = editor.encode_settings()
         info = editor.info()
+        # Resolve any source-inherited settings (container/encoder) against this
+        # clip, so disabled rows keep the source's container/codec.
+        settings = editor.encode_settings().for_source(
+            codec=info.codec, container=video.path.suffix.lstrip(".").lower()
+        )
         output_dir = editor.output_dir()
         taken = {job.output_path for job in self._queue.jobs()}
 
