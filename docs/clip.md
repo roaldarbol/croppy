@@ -50,7 +50,7 @@ With no trim, the whole timeline is used.
 
 ## One output per crop × trim
 
-croppy makes one file for **every crop combined with every trim**. Two crops and
+Croppy makes one file for **every crop combined with every trim**. Two crops and
 three trims make six files, and the queue button shows the count
 (**Add 6 Jobs to Queue**). With only crops, or only trims, you just get that one
 axis.
@@ -59,7 +59,7 @@ axis.
 
 The **Output** box sets where files land (**Folder**) and what they're called
 (**Basename**, seeded from the source name). A single output keeps the basename
-verbatim; when there are several, croppy appends `_crop1`, `_trim1`, … so they
+verbatim; when there are several, Croppy appends `_crop1`, `_trim1`, … so they
 stay distinct. See [Output names & the Jobs queue](output-and-jobs.md) for the
 full naming rules.
 

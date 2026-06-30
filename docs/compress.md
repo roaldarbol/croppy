@@ -4,6 +4,9 @@ The **Compress** tab re-encodes whole videos smaller — one output per input �
 without cropping or trimming. It's the place for "make these files take less
 space" in a batch.
 
+![The Compress tab](assets/app-compress-light.png#only-light){ loading=lazy }
+![The Compress tab](assets/app-compress-dark.png#only-dark){ loading=lazy }
+
 ## Add videos
 
 Drop videos onto the list or use **Add videos…**. Each row shows a thumbnail
@@ -27,7 +30,7 @@ rows applies folder and encoding changes to all of them at once.
 
 !!! tip "Compare variants"
     Duplicate a row, give the copy a different CRF/CQ (or a different name), and
-    queue both. croppy auto-numbers any output that would clash, so nothing gets
+    queue both. Croppy auto-numbers any output that would clash, so nothing gets
     overwritten.
 
 ## Queue

@@ -11,14 +11,17 @@ Every tab shows a sensible default name and lets you change it.
 | **Combine** | `<first clip>_combined` | Per group; the group's label is separate |
 
 The **Output** box on each tab also chooses the **folder** (defaulting next to the
-source). croppy never overwrites silently — if a name would clash with a file
+source). Croppy never overwrites silently — if a name would clash with a file
 that's already on disk or already queued, it appends `-2`, `-3`, …
 
 !!! tip
     On the **Clip** tab the name is a *basename*: when one video produces several
-    files, croppy adds the `_crop`/`_trim` suffix and the extension for you.
+    files, Croppy adds the `_crop`/`_trim` suffix and the extension for you.
 
 ## The Jobs queue
+
+![The Jobs tab](assets/app-jobs-light.png#only-light){ loading=lazy }
+![The Jobs tab](assets/app-jobs-dark.png#only-dark){ loading=lazy }
 
 Every **Add Job to Queue** button stages work on the **Jobs** tab — it collects
 everything from every tab, grouped by state and tagged by kind (clip / compress /

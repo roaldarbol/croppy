@@ -3,6 +3,9 @@
 The **Combine** tab joins several videos, in the order you choose, into a single
 file. You can stage as many joins as you like by organising them into **groups**.
 
+![The Combine tab](assets/app-combine-light.png#only-light){ loading=lazy }
+![The Combine tab](assets/app-combine-dark.png#only-dark){ loading=lazy }
+
 ## Groups
 
 Each **group** in the left list is one join: an ordered set of videos with its
@@ -35,5 +38,5 @@ is kept afterwards so you can tweak and re-queue it. Jobs land on the
 
 !!! note "Encoding is inherited where it can be"
     Combine always writes mp4. If you leave the **Encoder** unset (Match source),
-    croppy re-encodes with the first clip's codec family. See
+    Croppy re-encodes with the first clip's codec family. See
     [Encoding & presets](encoding.md).

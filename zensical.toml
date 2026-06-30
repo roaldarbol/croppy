@@ -1,5 +1,5 @@
 [project]
-site_name = "croppy"
+site_name = "Croppy"
 site_description = "Common lab video chores — cropping, trimming, joining, and compressing — in one window."
 site_author = "Mikkel Roald-Arbøl"
 site_url = "https://roaldarbol.github.io/croppy/"

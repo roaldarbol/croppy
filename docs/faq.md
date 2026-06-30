@@ -23,7 +23,7 @@ multiple encode engines busy.
 ### Will it overwrite my files?
 
 No. Outputs go to the folder you choose (defaulting next to the source), and if a
-name would clash with an existing or already-queued file, croppy appends
+name would clash with an existing or already-queued file, Croppy appends
 `-2`, `-3`, … Cropping/trimming/compressing always writes a *new* file; the source
 is untouched.
 
@@ -31,7 +31,7 @@ is untouched.
 
 That's the **Creation date** option (on by default, Windows only): the output
 inherits the source clip's creation date, so a processed file still reflects when
-the footage was recorded. Its "Date modified" shows when croppy wrote it. Turn it
+the footage was recorded. Its "Date modified" shows when Croppy wrote it. Turn it
 off in the Encoding panel.
 
 ### Can I make files smaller without re-cropping?

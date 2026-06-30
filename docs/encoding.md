@@ -11,14 +11,14 @@ differently.
 
 ## Apply a setting, or inherit it
 
-Each row has a **checkbox**. Checked means croppy forces that value; unchecked
+Each row has a **checkbox**. Checked means Croppy forces that value; unchecked
 means it leaves the source's value (or lets the encoder decide). So you can say
 "only change the container, keep everything else as the source had it" by ticking
 just **Container**.
 
 The buttons at the top flip every row at once:
 
-- **All** — force croppy's value for every setting.
+- **All** — force Croppy's value for every setting.
 - **Match source** — keep the source's container, codec, pixel format, frame
   rate, and audio, and let the encoder pick the rest.
 - **Reset** — restore every field to your saved default.
@@ -80,3 +80,12 @@ applied = ["container", "encoder", "cq", "nvenc_preset", "crf", "preset", "pixel
       tab, importing loads it into the form — you still click **Save settings**.
     - **Save settings** (Settings tab) persists the current form as the **default**
       every tab starts from.
+
+## The Settings tab
+
+The **Settings** tab is where that default encoding lives, alongside the log
+level. Edit the form and click **Save settings** to make it the starting point
+for every tab.
+
+![The Settings tab](assets/app-settings-light.png#only-light){ loading=lazy }
+![The Settings tab](assets/app-settings-dark.png#only-dark){ loading=lazy }
