@@ -201,13 +201,8 @@ def _add_videos(app: QApplication, vlist, videos: list[Path]) -> None:
 # --- framing ----------------------------------------------------------------
 
 
-def _frame(pix: QPixmap, *, dark: bool, pad: int = 84) -> QImage:
-    """Composite ``pix`` onto an aurora-gradient backdrop with rounded corners."""
-    w, h = pix.width() + pad * 2, pix.height() + pad * 2
-    target = QImage(w, h, QImage.Format.Format_ARGB32)
-
-    painter = QPainter(target)
-    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+def _paint_aurora(painter: QPainter, w: int, h: int, *, dark: bool) -> None:
+    """Fill ``(w, h)`` with the flowing macOS-ish aurora gradient + a corner glow."""
     base = QLinearGradient(0, 0, w, h)
     if dark:
         stops = [
@@ -237,6 +232,16 @@ def _frame(pix: QPixmap, *, dark: bool, pad: int = 84) -> QImage:
     glow.setColorAt(0.0, inner)
     glow.setColorAt(1.0, outer)
     painter.fillRect(QRect(0, 0, w, h), QBrush(glow))
+
+
+def _frame(pix: QPixmap, *, dark: bool, pad: int = 84) -> QImage:
+    """Composite ``pix`` onto an aurora-gradient backdrop with rounded corners."""
+    w, h = pix.width() + pad * 2, pix.height() + pad * 2
+    target = QImage(w, h, QImage.Format.Format_ARGB32)
+
+    painter = QPainter(target)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    _paint_aurora(painter, w, h, dark=dark)
     painter.end()
 
     rounded = QPixmap(pix.size())
@@ -270,6 +275,55 @@ def _save(img: QImage, name: str, *, dark: bool) -> None:
     out = ASSETS / f"{name}-{'dark' if dark else 'light'}.png"
     img.save(str(out))
     print(f"wrote {out.relative_to(REPO)}")
+
+
+def _launch_icon(*, dark: bool, tile: int = 460, pad: int = 130) -> QImage:
+    """The app icon as a macOS-style rounded-square tile on the aurora backdrop."""
+    crab = QPixmap(str(REPO / "src" / "croppy" / "assets" / "icons" / "croppy-512.png"))
+
+    tilepix = QPixmap(tile, tile)
+    tilepix.fill(Qt.GlobalColor.transparent)
+    tp = QPainter(tilepix)
+    tp.setRenderHint(QPainter.RenderHint.Antialiasing)
+    radius = tile * 0.2237  # the macOS "squircle" corner ratio
+    path = QPainterPath()
+    path.addRoundedRect(QRectF(0, 0, tile, tile), radius, radius)
+    tp.setClipPath(path)
+    fill = QLinearGradient(0, 0, 0, tile)
+    fill.setColorAt(0.0, QColor("#ffffff"))
+    fill.setColorAt(1.0, QColor("#ece6f6"))
+    tp.fillRect(QRect(0, 0, tile, tile), QBrush(fill))
+    margin = int(tile * 0.05)
+    art = crab.scaled(
+        tile - 2 * margin,
+        tile - 2 * margin,
+        Qt.AspectRatioMode.KeepAspectRatio,
+        Qt.TransformationMode.SmoothTransformation,
+    )
+    tp.drawPixmap((tile - art.width()) // 2, (tile - art.height()) // 2, art)
+    tp.end()
+
+    side = tile + pad * 2
+    target = QImage(side, side, QImage.Format.Format_ARGB32)
+    painter = QPainter(target)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    _paint_aurora(painter, side, side, dark=dark)
+    painter.end()
+
+    scene = QGraphicsScene()
+    scene.setBackgroundBrush(Qt.GlobalColor.transparent)
+    item = scene.addPixmap(tilepix)
+    shadow = QGraphicsDropShadowEffect()
+    shadow.setBlurRadius(60)
+    shadow.setColor(QColor(0, 0, 0, 150))
+    shadow.setOffset(0, 24)
+    item.setGraphicsEffect(shadow)
+    item.setPos(pad, pad)
+    p2 = QPainter(target)
+    p2.setRenderHint(QPainter.RenderHint.Antialiasing)
+    scene.render(p2, QRectF(0, 0, side, side), QRectF(0, 0, side, side))
+    p2.end()
+    return target
 
 
 # --- population -------------------------------------------------------------
@@ -404,6 +458,7 @@ def main() -> None:
             panel = _encoding_panel(app)
             _save(_frame(panel.grab(), dark=dark), "encoding", dark=dark)
             panel.deleteLater()
+            _save(_launch_icon(dark=dark), "launch-icon", dark=dark)
             app.processEvents()
 
     # Avoid a slow interpreter-exit waiting on Qt worker threads.

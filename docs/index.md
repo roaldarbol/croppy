@@ -1,6 +1,10 @@
+<p align="center" markdown>
+  ![Croppy](assets/croppy-logo.png){ width="240" }
+</p>
+
 # Croppy
 
-*Common lab video chores — cropping, trimming, joining, and compressing — in one window.*
+*Common video chores — cropping, trimming, joining, and compressing — in one window.*
 
 <p align="center" markdown>
 [![Tests](https://github.com/roaldarbol/croppy/actions/workflows/tests.yml/badge.svg)](https://github.com/roaldarbol/croppy/actions/workflows/tests.yml)

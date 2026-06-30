@@ -1,6 +1,6 @@
 [project]
 site_name = "Croppy"
-site_description = "Common lab video chores — cropping, trimming, joining, and compressing — in one window."
+site_description = "Common video chores — cropping, trimming, joining, and compressing — in one window."
 site_author = "Mikkel Roald-Arbøl"
 site_url = "https://roaldarbol.github.io/croppy/"
 repo_url = "https://github.com/roaldarbol/croppy"
@@ -9,17 +9,19 @@ copyright = "Copyright &copy; Mikkel Roald-Arbøl — MIT licensed"
 
 nav = [
   { "Home" = "index.md" },
-  { "Install & launch" = "install.md" },
-  { "The Clip tab" = "clip.md" },
-  { "The Compress tab" = "compress.md" },
-  { "The Combine tab" = "combine.md" },
+  { "Install" = "install.md" },
+  { "Clip" = "clip.md" },
+  { "Compress" = "compress.md" },
+  { "Combine" = "combine.md" },
   { "Encoding & presets" = "encoding.md" },
-  { "Output names & the Jobs queue" = "output-and-jobs.md" },
-  { "Tips & FAQ" = "faq.md" },
+  { "Output & jobs" = "output-and-jobs.md" },
+  { "FAQ" = "faq.md" },
 ]
 
 [project.theme]
 language = "en"
+logo = "assets/logo.png"
+favicon = "assets/logo.png"
 features = [
   "content.code.copy",
   "navigation.instant",

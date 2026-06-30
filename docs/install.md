@@ -34,12 +34,26 @@ app.
 
 ## Launching
 
+<p align="center" markdown>
+  ![Croppy app icon](assets/launch-icon-light.png#only-light){ width="160" }
+  ![Croppy app icon](assets/launch-icon-dark.png#only-dark){ width="160" }
+</p>
+
+Once installed, launch **Croppy** like any other app — look for this icon. It
+registers itself in the usual places:
+
+- **Windows** — the **Start menu** (and a desktop shortcut)
+- **macOS** — the **Applications** folder / Launchpad
+- **Linux** — your application menu
+
+Prefer the terminal? It's also a command:
+
 ```bash
 croppy                    # opens on the Clip tab — drop a video or click to browse
 croppy path/to/clip.mp4   # opens straight into the Clip editor with that clip
 ```
 
 !!! note "Requirements"
-    Python 3.12+ and a working `ffmpeg`/`ffprobe` (the install methods above
-    provide both). A recent NVIDIA GPU is optional — Croppy uses it for faster
-    encoding when it's there and falls back to the CPU when it isn't.
+    A working `ffmpeg`/`ffprobe` (the install methods above provide both). A
+    recent NVIDIA GPU is optional — Croppy uses it for faster encoding when it's
+    there and falls back to the CPU when it isn't.
