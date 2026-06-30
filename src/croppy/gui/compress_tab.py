@@ -23,8 +23,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from croppy.ffmpeg.clip import unique_output_path
-from croppy.ffmpeg.compress import default_compress_output_path
+from croppy.ffmpeg.clip import safe_stem, unique_output_path
 from croppy.ffmpeg.probe import ProbeError, probe
 from croppy.gui.compression_panel import (
     CompressionController,
@@ -46,6 +45,7 @@ class _ItemConfig:
 
     settings: EncodeSettings
     output_dir: Path | None = None  # None → next to the source file
+    name: str = ""  # output base name; "" → "<stem>_compressed"
 
 
 class CompressTab(QWidget):
@@ -83,8 +83,9 @@ class CompressTab(QWidget):
         hint = QLabel(
             "Add videos to compress. Each becomes <name>_compressed next to the "
             "original (or in a folder you choose). Select video(s) to set their "
-            "output folder and encoding; with none selected, queueing runs them "
-            "all. New videos start from the default."
+            "output folder and encoding (and, one at a time, the output name); "
+            "with none selected, queueing runs them all. New videos start from "
+            "the default."
         )
         hint.setWordWrap(True)
         hint.setStyleSheet("color: #888;")
@@ -94,9 +95,11 @@ class CompressTab(QWidget):
         v.addWidget(hint)
 
         # Output folder and encoding both mirror the selected row(s); inactive
-        # with nothing selected.
-        self.output_picker = OutputFolderPicker()
+        # with nothing selected. The name field is per-file, so it is only live
+        # for a single selected row.
+        self.output_picker = OutputFolderPicker(with_filename=True, filename_label="Filename")
         self.output_picker.changed.connect(self._apply_output_to_selection)
+        self.output_picker.name_edit.textChanged.connect(self._apply_name_to_selection)
         self.output_picker.setEnabled(False)
         v.addWidget(self.output_picker)
 
@@ -137,23 +140,35 @@ class CompressTab(QWidget):
     def _load_selection_into_panel(self) -> None:
         rows = self.video_list.selected_rows()
         active = bool(rows)
+        single = len(rows) == 1
+        paths = self.video_list.paths()
         # The right panel only edits a selected row; inactive (and showing the
-        # default) when nothing is selected, so it never shows a stale row.
+        # default) when nothing is selected, so it never shows a stale row. The
+        # name is per-file, so it is only editable for a single selected row.
         self.output_picker.setEnabled(active)
         self.compression.setEnabled(active)
+        if self.output_picker.name_edit is not None:
+            self.output_picker.name_edit.setEnabled(single)
         self._loading = True
         try:
             if not active:
                 self.compression.set_settings(self._controller.default())
                 self.output_picker.dir_edit.setText("")
+                self.output_picker.set_filename("")
                 return
-            current = self.video_list.current_row()
-            cfg = self._item_config(current if current in rows else rows[0])
+            row = self.video_list.current_row()
+            if row not in rows:
+                row = rows[0]
+            cfg = self._item_config(row)
             self.compression.set_settings(cfg.settings)
             if cfg.output_dir is not None:
                 self.output_picker.set_output_dir(cfg.output_dir)
             else:
                 self.output_picker.dir_edit.setText("")
+            if single:
+                self.output_picker.set_filename(cfg.name or f"{paths[row].stem}_compressed")
+            else:
+                self.output_picker.set_filename("")
         finally:
             self._loading = False
 
@@ -161,9 +176,10 @@ class CompressTab(QWidget):
         if self._loading:
             return
         for row in self.video_list.selected_rows():
+            cfg = self._item_config(row)
             self.video_list.set_item_data(
                 row,
-                _ItemConfig(settings, self._item_config(row).output_dir),
+                _ItemConfig(settings, cfg.output_dir, cfg.name),
                 summarize_settings(settings),
             )
 
@@ -172,10 +188,27 @@ class CompressTab(QWidget):
             return
         output_dir = self.output_picker.output_dir() if self.output_picker.has_dir() else None
         for row in self.video_list.selected_rows():
-            settings = self._item_config(row).settings
+            cfg = self._item_config(row)
             self.video_list.set_item_data(
-                row, _ItemConfig(settings, output_dir), summarize_settings(settings)
+                row,
+                _ItemConfig(cfg.settings, output_dir, cfg.name),
+                summarize_settings(cfg.settings),
             )
+
+    def _apply_name_to_selection(self) -> None:
+        # The output name is per-file, so it only applies to a lone selected row.
+        if self._loading:
+            return
+        rows = self.video_list.selected_rows()
+        if len(rows) != 1:
+            return
+        row = rows[0]
+        cfg = self._item_config(row)
+        self.video_list.set_item_data(
+            row,
+            _ItemConfig(cfg.settings, cfg.output_dir, self.output_picker.filename()),
+            summarize_settings(cfg.settings),
+        )
 
     # --- internals ----------------------------------------------------------
 
@@ -206,9 +239,10 @@ class CompressTab(QWidget):
                 logger.warning("Could not probe {} before queueing: {}", path, exc)
                 duration = 0.0
                 settings = cfg.settings
-            base = default_compress_output_path(
-                path, container=settings.container, output_dir=cfg.output_dir
-            )
+            parent = cfg.output_dir if cfg.output_dir is not None else path.parent
+            fallback = f"{path.stem}_compressed"
+            stem = safe_stem(cfg.name.strip() or fallback, fallback)
+            base = parent / f"{stem}.{settings.container}"
             output_path = unique_output_path(base, taken)
             taken.add(output_path)
             job = CompressJob(

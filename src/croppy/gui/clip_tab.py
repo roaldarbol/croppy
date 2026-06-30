@@ -181,6 +181,7 @@ class ClipTab(QWidget):
         trims = src.editor.trims()
         settings = src.editor.encode_settings()
         output_dir = src.editor.output_dir()
+        output_name = src.editor.output_name()
         # The duplicate is the same file the source already probed — reuse its
         # VideoInfo so we only re-open the file for the one frame we need.
         src_info = src.editor.info()
@@ -201,6 +202,8 @@ class ClipTab(QWidget):
                 editor.trim.add_trim(trim)
             editor.compression.adopt(settings)
             editor.set_output_dir(output_dir)
+            if output_name:
+                editor.output_picker.set_filename(output_name)
             self.video_ready.emit(editor)
 
         def failed(message: str) -> None:
@@ -295,16 +298,21 @@ class ClipTab(QWidget):
         # choice so crop-only and trim-only both still produce one axis of jobs.
         region_choices = regions or [None]
         trim_choices = trims or [None]
+        # A lone output keeps the chosen name verbatim; only when several files
+        # come from one video do we append _crop/_trim to keep them distinct.
+        many = len(region_choices) * len(trim_choices) > 1
+        stem = editor.output_name()
         count = 0
         for ci, region in enumerate(region_choices):
             for ti, trim in enumerate(trim_choices):
                 output_path = unique_output_path(
                     clip_output_path(
                         video.path,
-                        crop_index=ci if regions else None,
-                        trim_index=ti if trims else None,
+                        crop_index=ci if (many and regions) else None,
+                        trim_index=ti if (many and trims) else None,
                         container=settings.container,
                         output_dir=output_dir,
+                        stem=stem,
                     ),
                     taken,
                 )

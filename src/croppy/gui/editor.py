@@ -95,6 +95,9 @@ class EditorWidget(QWidget):
         )
         if not self.output_picker.has_dir():
             self.output_picker.set_output_dir(info.path.parent)
+        # Seed the output name from the source; the user can rename it. The crop/
+        # trim suffix (and extension) are still derived at queue time.
+        self.output_picker.set_filename(info.path.stem)
 
         self.frame_spin.setMaximum(info.nb_frames or 1_000_000_000)
         self.frame_spin.setValue(1)
@@ -136,6 +139,10 @@ class EditorWidget(QWidget):
 
     def set_output_dir(self, path: Path) -> None:
         self.output_picker.set_output_dir(path)
+
+    def output_name(self) -> str:
+        """User-chosen base name for outputs (empty falls back to the source)."""
+        return self.output_picker.filename()
 
     # --- UI -----------------------------------------------------------------
 
@@ -179,11 +186,15 @@ class EditorWidget(QWidget):
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.viewport().setAutoFillBackground(False)
         outer.addWidget(scroll, 1)
+        gutter = scroll.verticalScrollBar().sizeHint().width() or 16
 
         controls = QWidget()
         controls.setAutoFillBackground(False)
         v = QVBoxLayout(controls)
-        v.setContentsMargins(0, 0, 0, 0)
+        # Reserve the scrollbar's width as a right margin so no control's right
+        # edge (e.g. the output Basename field) hides under the vertical
+        # scrollbar — including styles that draw it as an overlay.
+        v.setContentsMargins(0, 0, gutter, 0)
         v.setSpacing(12)
         scroll.setWidget(controls)
 
@@ -196,7 +207,15 @@ class EditorWidget(QWidget):
         self.summary.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         v.addWidget(self.summary)
 
-        self.output_picker = OutputFolderPicker()
+        self.output_picker = OutputFolderPicker(
+            with_filename=True,
+            filename_label="Basename",
+            filename_tooltip=(
+                "Base name for the output file(s). When a clip produces more than one "
+                "output, a _crop/_trim suffix is appended; the file extension is added "
+                "automatically."
+            ),
+        )
         v.addWidget(self.output_picker)
 
         frame_group = QGroupBox("Preview frame")
@@ -249,9 +268,9 @@ class EditorWidget(QWidget):
         # A QScrollArea doesn't propagate its inner widget's preferred width, so
         # without this the splitter would shrink the panel below what the controls
         # need and the vertical scrollbar's gutter would clip the right-hand
-        # buttons (Add trim / Reload / Browse). Claim the controls' width plus the
-        # scrollbar gutter so everything is visible at the default panel width.
-        gutter = scroll.verticalScrollBar().sizeHint().width() or 16
+        # buttons (Add trim / Reload / Browse). Claim the controls' width (which
+        # already includes the right-margin gutter) plus the space the scrollbar
+        # takes, so everything is visible at the default panel width.
         needed = controls.minimumSizeHint().width() + gutter + 2 * PANEL_MARGIN
         side.setMinimumWidth(max(280, needed))
 

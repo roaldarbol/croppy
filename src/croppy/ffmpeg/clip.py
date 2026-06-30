@@ -7,6 +7,7 @@ trim keeps the whole timeline).
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from croppy.ffmpeg.binary import find_ffmpeg
@@ -85,33 +86,48 @@ def default_output_path(
     return parent / f"{input_path.stem}_crop{index + 1}.{container}"
 
 
+# Characters not safe in a filename on common platforms (Windows is strictest).
+_UNSAFE_NAME = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+
+
+def safe_stem(stem: str, fallback: str) -> str:
+    """Strip filename-unsafe characters from ``stem``; ``fallback`` if empty."""
+    cleaned = _UNSAFE_NAME.sub("", stem).strip().rstrip(".")
+    return cleaned or fallback
+
+
 def clip_output_path(
     input_path: Path,
     crop_index: int | None,
     trim_index: int | None,
     container: str = "mp4",
     output_dir: Path | None = None,
+    stem: str | None = None,
 ) -> Path:
     """Name one clip output from its crop and/or trim index (each 0-based).
 
-    The suffix reflects which dimensions are present, so existing crop-only
-    names are unchanged:
+    ``stem`` overrides the base name (the user-chosen output name); when omitted
+    or empty it falls back to ``input_path``'s stem. A crop/trim suffix is added
+    only when that dimension is present, so:
 
-    * crop only        → ``<stem>_crop<i+1>.<ext>``
-    * trim only        → ``<stem>_trim<j+1>.<ext>``
+    * crop only         → ``<stem>_crop<i+1>.<ext>``
+    * trim only         → ``<stem>_trim<j+1>.<ext>``
     * crop **and** trim → ``<stem>_crop<i+1>_trim<j+1>.<ext>``
+    * neither (a single output) → ``<stem>.<ext>`` (the name verbatim)
 
-    A ``None`` index omits that part; if both are ``None`` the suffix is
-    ``_clip`` (defensive — the UI never queues an output with neither).
+    The caller passes ``crop_index=trim_index=None`` for a lone output so it
+    keeps the chosen name; uniqueness against existing files is handled by
+    :func:`unique_output_path`.
     """
     parent = output_dir if output_dir is not None else input_path.parent
+    base = safe_stem(stem, input_path.stem) if stem is not None else input_path.stem
     parts: list[str] = []
     if crop_index is not None:
         parts.append(f"crop{crop_index + 1}")
     if trim_index is not None:
         parts.append(f"trim{trim_index + 1}")
-    suffix = "_".join(parts) if parts else "clip"
-    return parent / f"{input_path.stem}_{suffix}.{container}"
+    name = f"{base}_{'_'.join(parts)}" if parts else base
+    return parent / f"{name}.{container}"
 
 
 def unique_output_path(base: Path, taken: set[Path]) -> Path:

@@ -242,3 +242,21 @@ def test_clip_output_path_naming(tmp_path: Path) -> None:
     # Both, with container + output dir honored.
     out = clip_output_path(src, crop_index=1, trim_index=0, container="mkv", output_dir=tmp_path)
     assert out == tmp_path / "movie_crop2_trim1.mkv"
+
+
+def test_clip_output_path_custom_stem(tmp_path: Path) -> None:
+    src = tmp_path / "movie.mp4"
+    # A lone output (no indices) keeps the chosen name verbatim.
+    assert clip_output_path(src, None, None, stem="final").name == "final.mp4"
+    # A crop index still appends the suffix to the chosen name.
+    assert clip_output_path(src, 0, None, stem="final").name == "final_crop1.mp4"
+    # No stem at all → the source stem, verbatim for a lone output.
+    assert clip_output_path(src, None, None).name == "movie.mp4"
+
+
+def test_clip_output_path_sanitizes_and_falls_back(tmp_path: Path) -> None:
+    src = tmp_path / "movie.mp4"
+    # Filename-unsafe characters are stripped.
+    assert clip_output_path(src, None, None, stem="a/b:c*?").name == "abc.mp4"
+    # An empty/whitespace name falls back to the source stem.
+    assert clip_output_path(src, None, None, stem="   ").name == "movie.mp4"

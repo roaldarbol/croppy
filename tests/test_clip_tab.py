@@ -119,6 +119,7 @@ def test_queue_editor_trim_only_uses_full_frame(
     qtbot.addWidget(tab)
     _open(tab, _copy(test_video, tmp_path / "a.mp4"), qtbot)
     editor = tab.current_editor()
+    editor.output_picker.set_filename("snip")
     editor.trim.add_trim(Trim(start_frame=2, end_frame=5))
 
     editor.process_btn.click()
@@ -126,7 +127,8 @@ def test_queue_editor_trim_only_uses_full_frame(
     job = submitted[0]
     assert job.region is None  # no crop → full frame
     assert job.trim is not None
-    assert job.output_path.name == "a_trim1.mp4"
+    # A lone output keeps the chosen name verbatim (no _trim1 suffix).
+    assert job.output_path.name == "snip.mp4"
 
 
 def test_duplicate_copies_crops_and_settings(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
@@ -159,12 +161,52 @@ def test_queue_uniquifies_repeat_outputs(qtbot, qapp, test_video: Path, tmp_path
     tab = ClipTab(CompressionController(), queue)
     qtbot.addWidget(tab)
     _open(tab, _copy(test_video, tmp_path / "a.mp4"), qtbot)
-    tab.current_editor().canvas.add_crop(QRectF(0, 0, 100, 100))
+    editor = tab.current_editor()
+    editor.output_picker.set_filename("out")
+    editor.canvas.add_crop(QRectF(0, 0, 100, 100))
 
-    tab.current_editor().process_btn.click()  # a_crop1.mp4
-    tab.current_editor().process_btn.click()  # a_crop1-2.mp4
+    editor.process_btn.click()  # out.mp4
+    editor.process_btn.click()  # out-2.mp4
     names = [j.output_path.name for j in submitted]
-    assert names == ["a_crop1.mp4", "a_crop1-2.mp4"]
+    assert names == ["out.mp4", "out-2.mp4"]
+
+
+def test_queue_single_output_uses_custom_name_verbatim(
+    qtbot, qapp, test_video: Path, tmp_path: Path
+) -> None:
+    submitted: list = []
+    queue = MagicMock()
+    queue.jobs.side_effect = lambda: list(submitted)
+    queue.submit.side_effect = lambda job: submitted.append(job)
+    tab = ClipTab(CompressionController(), queue)
+    qtbot.addWidget(tab)
+    _open(tab, _copy(test_video, tmp_path / "a.mp4"), qtbot)
+    editor = tab.current_editor()
+    editor.output_picker.set_filename("interview")
+    editor.canvas.add_crop(QRectF(0, 0, 100, 100))
+
+    editor.process_btn.click()
+    assert [j.output_path.name for j in submitted] == ["interview.mp4"]
+
+
+def test_queue_multiple_outputs_append_suffix_to_custom_name(
+    qtbot, qapp, test_video: Path, tmp_path: Path
+) -> None:
+    submitted: list = []
+    queue = MagicMock()
+    queue.jobs.side_effect = lambda: list(submitted)
+    queue.submit.side_effect = lambda job: submitted.append(job)
+    tab = ClipTab(CompressionController(), queue)
+    qtbot.addWidget(tab)
+    _open(tab, _copy(test_video, tmp_path / "a.mp4"), qtbot)
+    editor = tab.current_editor()
+    editor.output_picker.set_filename("interview")
+    editor.canvas.add_crop(QRectF(0, 0, 100, 100))
+    editor.canvas.add_crop(QRectF(20, 20, 60, 60))
+
+    editor.process_btn.click()
+    names = sorted(j.output_path.name for j in submitted)
+    assert names == ["interview_crop1.mp4", "interview_crop2.mp4"]
 
 
 def test_remove_video(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:

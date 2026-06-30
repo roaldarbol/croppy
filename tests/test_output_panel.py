@@ -99,6 +99,7 @@ def test_main_window_writes_to_chosen_output_dir(
     with qtbot.waitSignal(window._queue.job_finished, timeout=30000):
         window._queue.start_all()
 
-    assert (out_dir / "clip_crop1.mp4").is_file()
-    # And it should NOT have landed next to the source
-    assert not (src_dir / "clip_crop1.mp4").exists()
+    # A single output keeps the source name verbatim, in the chosen folder.
+    assert (out_dir / "clip.mp4").is_file()
+    # Nothing was written next to the source: the src folder still holds only it.
+    assert [p.name for p in src_dir.iterdir()] == ["clip.mp4"]
