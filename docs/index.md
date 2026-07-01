@@ -1,21 +1,14 @@
-<p align="center" markdown>
-  ![Croppy](assets/croppy-logo.png){ width="240" }
-</p>
-
 # Croppy
 
-*Common video chores — cropping, trimming, joining, and compressing — in one window.*
-
-<p align="center" markdown>
 [![Tests](https://github.com/roaldarbol/croppy/actions/workflows/tests.yml/badge.svg)](https://github.com/roaldarbol/croppy/actions/workflows/tests.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://github.com/roaldarbol/croppy)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](https://github.com/roaldarbol/croppy/blob/main/LICENSE)
-</p>
 
-Croppy does the parts of ffmpeg that take a handful of flags nobody wants to type
-by hand. You draw on a frame, type a couple of numbers, pick a quality, and click
-**Add Job to Queue** — Croppy builds the ffmpeg command and runs it for you.
+Croppy is a **desktop app for everyday video chores — cropping, trimming, joining,
+and compressing** — turning the ffmpeg flags nobody wants to type into a
+point-and-click window: draw on a frame, pick a quality, and click **Add Job to
+Queue**.
 
 ![The Clip tab](assets/app-clip-light.png#only-light){ loading=lazy }
 ![The Clip tab](assets/app-clip-dark.png#only-dark){ loading=lazy }
