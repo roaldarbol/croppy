@@ -30,26 +30,26 @@ by hand. You draw on a frame, type a couple of numbers, pick a quality, and clic
 Croppy is organised into a few tabs that share one **Encoding** panel design and
 one progress strip along the bottom you can watch and cancel from:
 
-- **[Clip](clip.md)** — draw crop boxes and/or set time ranges (*trims*) on a
+- 🎬 **[Clip](clip.md)** — draw crop boxes and/or set time ranges (*trims*) on a
   video and get one file per combination.
-- **[Compress](compress.md)** — re-encode any number of videos smaller in one go.
-- **[Combine](combine.md)** — join videos, in the order you choose, into one file.
-- **[Jobs](output-and-jobs.md)** — everything you've staged from any tab; start,
+- 🗜️ **[Compress](compress.md)** — re-encode any number of videos smaller in one go.
+- 🔗 **[Combine](combine.md)** — join videos, in the order you choose, into one file.
+- ▶️ **[Jobs](output-and-jobs.md)** — everything you've staged from any tab; start,
   cancel, and clear from here.
-- **[Settings](encoding.md)** — the default encoding every tab starts from.
+- ⚙️ **[Settings](encoding.md)** — the default encoding every tab starts from.
 
 ## The ideas that run through it
 
-- **Stage, then run.** Each tab's **Add Job to Queue** button stages work on the
+- 📥 **Stage, then run.** Each tab's **Add Job to Queue** button stages work on the
   **Jobs** tab; you assemble a batch and fire it off when you're ready. A slim
   strip at the bottom always shows what's happening, from whichever tab you're on.
-- **Encoding is per item.** The **Settings** tab holds the default; everything you
+- 🎛️ **Encoding is per item.** The **Settings** tab holds the default; everything you
   queue carries its own copy, so you can queue the same video twice with small
   differences and compare. By default Croppy encodes on your **graphics card**
   when it can — which is much faster — and on the **CPU** otherwise.
-- **Apply only what you mean to.** Every encoding setting can be left to inherit
+- ✅ **Apply only what you mean to.** Every encoding setting can be left to inherit
   from the source instead of being forced — see [Encoding & presets](encoding.md).
-- **You name the output.** Every tab shows a sensible default name and lets you
+- 🏷️ **You name the output.** Every tab shows a sensible default name and lets you
   change it — see [Output names & the Jobs queue](output-and-jobs.md).
 
 !!! tip "New here?"
