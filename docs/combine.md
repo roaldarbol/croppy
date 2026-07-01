@@ -24,11 +24,14 @@ they're joined top-to-bottom into one file.
 - **Output folder** — defaults to the first clip's location.
 - **Filename** — defaults to `<first clip>_combined`, and you can change it.
 
-## Crash-safe output
+## Crash-safe, playable partials
 
-A join is written as a fragmented mp4 to a `.partial.mp4` and only renamed to its
-final name once it finishes. So if a long join is interrupted, you're left with a
-playable, clearly-marked partial file rather than a corrupt one.
+Like every Croppy output, a join only takes its final filename once it finishes,
+so an interrupted or crashed run never leaves a corrupt file there (see
+[Output & jobs](output-and-jobs.md)). Combine goes one step further: it writes a
+**fragmented** mp4 to `.partial.mp4` that stays **playable up to where it stopped**
+— so even an interrupted long join leaves you something you can watch, clearly
+marked as partial. (Clip and Compress simply discard their partial instead.)
 
 ## Queue
 
