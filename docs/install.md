@@ -2,12 +2,16 @@
 
 ## Recommended: `pixi global`
 
-Install Croppy as a global command-line app with [pixi](https://pixi.sh), from
+Install Croppy as a global command-line app with [Pixi](https://pixi.sh), from
 the `sleeb-forge` channel (until it lands on conda-forge):
 
 ```bash
-pixi global install croppy -c https://prefix.dev/sleeb-forge
+pixi global install croppy -c https://prefix.dev/sleeb-forge -c conda-forge
 ```
+
+!!! note "Don't have Pixi?"
+    [Install Pixi first](https://pixi.sh/latest/installation/) — it's a one-line
+    command for macOS, Linux, and Windows.
 
 !!! note "Coming to conda-forge"
     Croppy is on its way to **conda-forge**. Once it lands you'll be able to

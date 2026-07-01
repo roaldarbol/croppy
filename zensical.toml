@@ -2,19 +2,25 @@
 site_name = "Croppy"
 site_description = "Common video chores — cropping, trimming, joining, and compressing — in one window."
 site_author = "Mikkel Roald-Arbøl"
-site_url = "https://roaldarbol.github.io/croppy/"
+site_url = "https://roald-arboel.com/croppy/"
 repo_url = "https://github.com/roaldarbol/croppy"
 repo_name = "roaldarbol/croppy"
 copyright = "Copyright &copy; Mikkel Roald-Arbøl — MIT licensed"
 
+# Structural + typographic touches (fonts, boxed content, sidebar, footer cards)
+# live in the stylesheet; the colour palette stays Croppy's built-in deep purple.
+extra_css = ["stylesheets/extra.css"]
+
 nav = [
   { "Home" = "index.md" },
   { "Install" = "install.md" },
-  { "Clip" = "clip.md" },
-  { "Compress" = "compress.md" },
-  { "Combine" = "combine.md" },
-  { "Encoding & presets" = "encoding.md" },
-  { "Output & jobs" = "output-and-jobs.md" },
+  { "Usage" = [
+    { "Clip" = "clip.md" },
+    { "Compress" = "compress.md" },
+    { "Combine" = "combine.md" },
+    { "Encoding & presets" = "encoding.md" },
+    { "Output & jobs" = "output-and-jobs.md" },
+  ] },
   { "FAQ" = "faq.md" },
   { "Credits" = "credits.md" },
 ]
@@ -23,18 +29,30 @@ nav = [
 language = "en"
 logo = "assets/logo.png"
 favicon = "assets/logo.png"
+
+# A pixi.sh-style left sidebar: collapsible sections (no `navigation.sections`,
+# which would flatten them into always-open groups; no `navigation.tabs`, which
+# would move them into the header). `navigation.indexes` folds a section's
+# overview page into its header where one exists.
 features = [
   "content.code.copy",
+  "content.code.annotate",
   "navigation.instant",
   "navigation.instant.progress",
-  "navigation.sections",
+  "navigation.indexes",
   "navigation.top",
   "navigation.tracking",
   "navigation.footer",
+  "toc.follow",
   "search.highlight",
   "search.suggest",
-  "toc.follow",
 ]
+
+# Body in Inter, code in JetBrains Mono (like pixi.sh); the warm display serif
+# for headings/titles is set in stylesheets/extra.css.
+[project.theme.font]
+text = "Inter"
+code = "JetBrains Mono"
 
 [[project.theme.palette]]
 media = "(prefers-color-scheme: light)"
@@ -68,5 +86,8 @@ anchor_linenums = true
 
 [project.markdown_extensions.pymdownx.tabbed]
 alternate_style = true
+
+[project.markdown_extensions.pymdownx.tasklist]
+custom_checkbox = true
 
 [project.markdown_extensions.pymdownx.emoji]

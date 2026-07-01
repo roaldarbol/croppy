@@ -1,0 +1,167 @@
+/* Croppy docs — structural & typographic touches ported from the Pixiline docs.
+ *
+ * Deliberately *not* a colour scheme: Croppy keeps its built-in "deep purple"
+ * Material palette. Everything here uses Material's own accent variables
+ * (var(--md-accent-fg-color), …) so it follows that palette, plus a couple of
+ * neutral page/card tones for the boxed-content layout.
+ */
+
+/* A warm display serif for headings/titles; body & code stay Inter / JetBrains
+ * Mono (set in zensical.toml). */
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap");
+
+:root {
+  --font-display: "Fraunces", Georgia, "Times New Roman", serif;
+}
+
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3,
+.md-typeset h4,
+.md-typeset h5,
+.md-typeset h6,
+.md-header__topic,
+.md-nav--primary .md-nav__title,
+.md-nav--secondary .md-nav__title,
+.md-footer__link .md-footer__title {
+  font-family: var(--font-display);
+}
+.md-typeset h1,
+.md-typeset h2 {
+  font-weight: 600;
+}
+
+/* Accent underline beneath page headings. */
+.md-typeset h1 {
+  border-bottom: 2px solid var(--md-accent-fg-color);
+  padding-bottom: 0.2rem;
+}
+
+/* The site title next to the logo, a touch larger. */
+.md-header__topic {
+  font-weight: 700;
+}
+.md-header__topic .md-ellipsis {
+  font-size: 1.35rem;
+}
+
+/* Rounded corners on the framed screenshots + launch icon. */
+.md-typeset img[src*="assets/app-"],
+.md-typeset img[src*="assets/launch-icon"] {
+  border-radius: 12px;
+}
+
+/* --- pixi.sh-style boxed content -------------------------------------------
+ * The page sits on a muted background; the central column is a raised card.
+ * Neutral tones only (no brand colours). */
+[data-md-color-scheme="default"] {
+  --croppy-page-bg: #eeecf3;
+}
+[data-md-color-scheme="slate"] {
+  --croppy-page-bg: #13131a;
+}
+.md-main {
+  background-color: var(--croppy-page-bg);
+}
+.md-content {
+  background-color: var(--md-default-bg-color);
+  border-radius: 12px;
+  margin-block: 1.2rem;
+  padding-inline: 1.2rem;
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.1),
+    0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+[data-md-color-scheme="slate"] .md-content {
+  box-shadow:
+    0 1px 4px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+/* --- Logo above the right-hand table of contents (pixi.sh mascot spot) ------ */
+.md-sidebar--secondary .md-nav--secondary::before {
+  content: "";
+  display: block;
+  width: 140px;
+  height: 140px;
+  margin: 0.25rem auto 1.25rem;
+  background: url("../assets/logo.png") center / contain no-repeat;
+}
+
+/* Right-hand TOC: a serif "Table of contents" heading (relabelled from "On this
+ * page"), with roomy items. */
+.md-sidebar--secondary .md-nav__title {
+  font-size: 0;
+  color: var(--md-default-fg-color);
+  background: transparent;
+  box-shadow: none;
+  margin-bottom: 0.5rem;
+  text-transform: none;
+}
+.md-sidebar--secondary .md-nav__title::before {
+  content: "Table of contents";
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.15rem;
+  line-height: 1.25;
+}
+.md-nav--secondary .md-nav__list .md-nav__link {
+  font-size: 0.74rem;
+  margin-top: 0.08rem;
+}
+
+/* --- Tighter left-sidebar rhythm ------------------------------------------- */
+.md-nav--primary .md-nav__list .md-nav__link,
+.md-nav--primary .md-nav__item--nested > .md-nav__link {
+  margin-top: 0.1rem;
+  padding-top: 0.1rem;
+  padding-bottom: 0.1rem;
+}
+.md-nav--primary .md-nav__item .md-nav {
+  margin-top: 0.1rem;
+}
+
+/* --- pixi.sh-style prev/next footer "cards" -------------------------------- */
+.md-footer {
+  background-color: var(--croppy-page-bg);
+  border-top-color: var(--croppy-page-bg);
+}
+.md-footer-meta {
+  background-color: var(--md-default-bg-color);
+}
+.md-footer__inner {
+  gap: 0.8rem;
+  padding-top: 1.2rem;
+  padding-bottom: 2rem;
+}
+.md-footer__link {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 12px;
+  padding: 0.7rem 1.1rem;
+  opacity: 1;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s;
+}
+.md-footer__link:is(:hover, :focus) {
+  background-color: var(--md-accent-fg-color--transparent);
+  border-color: var(--md-accent-fg-color);
+}
+.md-footer__direction {
+  font-family: var(--font-display);
+  opacity: 0.65;
+  font-size: 0.72rem;
+}
+.md-footer__title .md-ellipsis {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+/* --- Tables: soft rounded border to match the boxed content ---------------- */
+.md-typeset table:not([class]) {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 10px;
+  overflow: hidden;
+}
