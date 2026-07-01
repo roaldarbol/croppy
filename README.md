@@ -1,11 +1,11 @@
 <p align="center">
-  <img src="src/croppy/assets/croppy.png" alt="croppy logo" width="200">
+  <img src="src/croppy/assets/croppy.png" alt="Croppy logo" width="200">
 </p>
 
-<h1 align="center">croppy</h1>
+<h1 align="center">Croppy</h1>
 
 <p align="center">
-  <em>Common lab video chores — cropping, joining, and compressing — in one window.</em>
+  <em>Common video chores — cropping, trimming, joining, and compressing — in one window.</em>
 </p>
 
 <p align="center">
@@ -17,62 +17,50 @@
 
 ---
 
-croppy does the parts ffmpeg handles in a handful of flags nobody wants to type by hand. It's organized into three operation tabs — **Crop**, **Combine**, **Compress** — plus a **Jobs** queue and a **Settings** tab, all sharing one **Encoding** panel design and one progress strip at the bottom you can watch and cancel from:
+Croppy is a **desktop app for everyday video chores — cropping, trimming, joining, and compressing** — turning the ffmpeg flags nobody wants to type into a point-and-click window: draw on a frame, pick a quality, and click **Add Job to Queue**.
 
-- **Crop** — draw one or more boxes on a preview frame and get one cropped file per box.
-- **Combine** — pick videos, drag them into the order you want, and join them into a single file. Queue as many combine jobs as you like.
-- **Compress** — pick any number of videos and re-encode them smaller in one go.
+<p align="center">
+  <img src="docs/assets/app-clip-light.png#gh-light-mode-only" alt="The Clip tab" width="820">
+  <img src="docs/assets/app-clip-dark.png#gh-dark-mode-only" alt="The Clip tab" width="820">
+</p>
 
-Each tab builds jobs with an **Add Job to Queue** button (which flashes a short confirmation so you know it landed); the **Jobs** tab collects everything you've staged from any tab. From there you start them — **Start all** or **Start selected** — so you can assemble a batch and fire it off when you're ready. A slim strip along the bottom of the window always shows what's happening (counts + progress), from whichever tab you're on.
+> [!TIP]
+> **Full documentation:** **[roald-arboel.com/croppy](https://roald-arboel.com/croppy)**
 
-Encoding is **per item**: the **Settings** tab holds the *default*, and each thing you queue carries its own. In Crop every open video has its own settings; in Compress every video row does; in Combine every group does. So you can queue the same video a few times with small differences and compare. By default croppy encodes with **NVENC HEVC on the GPU when it's available** and falls back to CPU **libx265** otherwise, so files shrink without you choosing an encoder — but the panel lets you force GPU or CPU and tune quality.
+## What's in the window
 
-## What you can do
+Croppy is organised into a few tabs that share one **Encoding** panel design and one progress strip along the bottom you can watch and cancel from:
 
-- **Crop**: open one or more videos — drop them on the canvas or use **Add video…** (you can **select or drag in several at once**). They collect in a left **Videos** list where each clip keeps its own crops, encoding, output folder, and preview frame; **Duplicate** reuses a clip's crops/settings and **Remove** drops one. Pick the preview frame (handy when a clip starts on black); draw, resize (corner/edge handles), and reposition multiple boxes — each box is an independent output.
-- **Combine**: organize joins as **groups** — each group is one ordered set of videos with its own output name and encoding. Build several groups in the left list, then **Add Job to Queue** stages the selected group. Joins are written as fragmented mp4 to a `.partial.mp4` and renamed only on success, so an interrupted run leaves a playable, clearly-partial file.
-- **Compress**: drop or add videos and queue one compress job each (named `<name>_compressed.mp4`, auto-numbered if you queue the same source again). Each row has its **own encoding** (click a row to edit it; the row shows a summary). **Duplicate selected** copies rows; the list stays put after queueing so you can re-queue with tweaked settings.
-- **Jobs**: see every staged job from every tab (grouped by state, with a crop/combine/compress tag), start all or just the ones you select, cancel a running job, and remove or clear finished rows.
-- **Settings**: set the default encoding every tab starts from and the runtime log level; one **Save settings** button persists the whole tab (unsaved edits revert if you switch away and back).
-- Run several jobs at once with the **Parallel** toggle on the Jobs tab — useful for keeping an NVENC GPU's encode engines busy.
-- Tune any **Encoding** panel: container (`mp4` / `mkv` / `mov`), encoder (Auto / NVENC HEVC / CPU libx265 / CPU libx264), NVENC CQ + preset, CPU CRF + preset + tune + pixel format, audio mode, audio bitrate, and faststart.
+- 🎬 **[Clip](https://roald-arboel.com/croppy/clip/)** — draw crop boxes and/or set time ranges (*trims*) on a video and get one file per combination.
+- 🗜️ **[Compress](https://roald-arboel.com/croppy/compress/)** — re-encode any number of videos smaller in one go.
+- 🔗 **[Combine](https://roald-arboel.com/croppy/combine/)** — join videos, in the order you choose, into one file.
+- ▶️ **[Jobs](https://roald-arboel.com/croppy/output-and-jobs/)** — everything you've staged from any tab; start, cancel, and clear from here.
+- ⚙️ **[Settings](https://roald-arboel.com/croppy/encoding/)** — the default encoding every tab starts from.
+
+## The ideas that run through it
+
+- 📥 **Stage, then run.** Each tab's **Add Job to Queue** button stages work on the **Jobs** tab; you assemble a batch and fire it off when you're ready. A slim strip at the bottom always shows what's happening, from whichever tab you're on.
+- 🎛️ **Encoding is per item.** The **Settings** tab holds the default; everything you queue carries its own copy, so you can queue the same video twice with small differences and compare. By default Croppy encodes on your **graphics card** when it can — which is much faster — and on the **CPU** otherwise.
+- ✅ **Apply only what you mean to.** Every encoding setting can be applied or left to inherit from the source instead of being forced.
+- 🏷️ **You name the output.** Every tab shows a sensible default name and lets you change it.
 
 ## Install
 
-croppy is on its way to **conda-forge**. Once it lands you'll be able to:
+Install Croppy as a global command-line app with [Pixi](https://pixi.sh), from the `sleeb-forge` channel (until it lands on conda-forge):
 
 ```bash
-pixi add croppy
-# or
-conda install -c conda-forge croppy
+pixi global install croppy -c https://prefix.dev/sleeb-forge -c conda-forge
 ```
 
-In the meantime, you can run it straight from a checkout — [pixi](https://pixi.sh) handles everything, including bringing in `ffmpeg`:
+> [!NOTE]
+> Don't have Pixi? [Install it first](https://pixi.sh/latest/installation/) — it's a one-liner. Croppy is on its way to **conda-forge**; once it lands you'll be able to drop the `sleeb-forge` channel.
+
+Once installed, launch **Croppy** from your Start menu / Applications folder / app menu, or run it from a terminal:
 
 ```bash
-git clone https://github.com/roaldarbol/croppy
-cd croppy
-pixi run croppy
+croppy                    # opens on the Clip tab — drop a video or click to browse
+croppy path/to/clip.mp4   # opens straight into the Clip editor with that clip
 ```
-
-## Using it
-
-```bash
-croppy                    # opens on the Crop tab — drop a video or click to browse
-croppy path/to/clip.mp4   # opens the Crop tab straight into the editor with that clip
-```
-
-On the **Crop** tab, once a video is open:
-
-- **Click-and-drag** on the frame to draw a crop box.
-- **Click a box** to select it; its handles appear. Drag the body to move it, drag a handle to resize. The selected box is also highlighted in the sidebar list (and vice-versa).
-- **Delete** or **Backspace** removes the selected box.
-- **Reload** in the *Preview frame* group re-extracts the preview at a different frame number — useful for finding a representative moment.
-- **Add Job to Queue** stages one job per box (named `<original_stem>_crop1.<ext>`, `_crop2.<ext>`, …) on the Jobs tab.
-
-On the **Combine** and **Compress** tabs, drop videos onto the list (or **Add videos…**) — each row is a thumbnail plus the file's resolution, fps, duration, and frame count. Drag to reorder, select rows and **Remove selected** (or press Delete) to prune; Compress also has **Duplicate selected**. In **Combine** the list belongs to the selected **group** (use **New group** to stage another join); in **Compress** clicking a row shows that video's own encoding. Choose an **Output folder** (Combine groups also take a file name), and tweak the **Encoding** panel for the selected item before queueing.
-
-Staged jobs collect on the **Jobs** tab. Hit **Start all** or tick a few rows and **Start selected**; **Cancel** stops a running job, **Remove selected** drops staged ones, and **Clear finished** tidies completed rows away. The bottom strip summarizes it all from any tab.
 
 ## Contributing
 
@@ -80,16 +68,20 @@ The codebase is small and meant to stay readable. Layout:
 
 ```text
 src/croppy/ffmpeg/   # subprocess wrappers around ffmpeg / ffprobe (no Qt here):
-                     #   encoder.py (NVENC/CPU args), crop.py, compress.py, combine.py
+                     #   encoder.py (GPU/CPU args), clip.py, compress.py, combine.py
 src/croppy/gui/      # PySide6 widgets: one tab per operation + shared
                      #   CompressionPanel, VideoList, OutputFolderPicker, StatusStrip
-src/croppy/jobs/     # job queue + per-job QProcess worker; Job has crop/compress/combine variants
-src/croppy/models.py # CropRegion, EncodeSettings — plain dataclasses
+src/croppy/jobs/     # job queue + per-job QProcess worker; Job has clip/compress/combine variants
+src/croppy/models.py # CropRegion, Trim, EncodeSettings — plain dataclasses
 ```
 
-To set up a working copy:
+To set up a working copy — [Pixi](https://pixi.sh) handles everything, including `ffmpeg`:
 
 ```bash
+git clone https://github.com/roaldarbol/croppy
+cd croppy
+pixi run croppy                # launch the app from source
+
 pixi run -e dev install-hooks  # one-time: wire lefthook pre-commit hooks
 pixi run -e dev test
 pixi run -e dev lint
