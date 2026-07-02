@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from croppy.config import load_encode_settings
+from croppy.config import load_check_updates, load_encode_settings
 from croppy.gui.compression_panel import CompressionController, CompressionPanel
 from croppy.gui.settings_tab import SettingsTab
 from croppy.models import EncodeSettings
@@ -45,6 +45,18 @@ def test_settings_tab_saves_default_on_button(qtbot, qapp) -> None:
     tab.save_btn.click()
     assert controller.default().cq == 35
     assert load_encode_settings().cq == 35  # persisted via QSettings
+    assert not tab.save_btn.isEnabled()
+
+
+def test_settings_tab_persists_update_check_toggle(qtbot, qapp) -> None:
+    controller = CompressionController()
+    tab = SettingsTab(controller)
+    qtbot.addWidget(tab)
+    assert tab.update_check.isChecked()  # on by default
+    tab.update_check.setChecked(False)
+    assert tab.save_btn.isEnabled()
+    tab.save_btn.click()
+    assert load_check_updates() is False  # persisted
     assert not tab.save_btn.isEnabled()
 
 

@@ -7,6 +7,7 @@ from pathlib import Path
 from loguru import logger
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QFileDialog,
     QFormLayout,
@@ -19,7 +20,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from croppy.config import load_log_level, save_log_level
+from croppy.config import (
+    load_check_updates,
+    load_log_level,
+    save_check_updates,
+    save_log_level,
+)
 from croppy.gui.compression_panel import CompressionController
 from croppy.gui.settings_panel import SettingsPanel
 from croppy.logging import LEVELS, current_level, set_level
@@ -146,6 +152,21 @@ class SettingsTab(QWidget):
         form.addRow("Log level:", self.log_level_combo)
         layout.addLayout(form)
 
+        updates_heading = QLabel("<b>Updates</b>")
+        updates_heading.setTextFormat(Qt.TextFormat.RichText)
+        updates_heading.setContentsMargins(0, 10, 0, 0)
+        layout.addWidget(updates_heading)
+
+        self._saved_check_updates = load_check_updates()
+        self.update_check = QCheckBox("Check for updates on startup")
+        self.update_check.setToolTip(
+            "On launch, ask the release channel whether a newer Croppy is available\n"
+            "and show a one-time prompt if so. Nothing is sent about you or your files."
+        )
+        self.update_check.setChecked(self._saved_check_updates)
+        self.update_check.toggled.connect(self._on_edited)
+        layout.addWidget(self.update_check)
+
         layout.addStretch(1)
         return column
 
@@ -157,6 +178,7 @@ class SettingsTab(QWidget):
         super().showEvent(event)
         self.settings_panel.set_settings(self._controller.default())
         self.log_level_combo.setCurrentText(self._saved_log_level)
+        self.update_check.setChecked(self._saved_check_updates)
         self.save_btn.setEnabled(False)
         self._status.clear()
 
@@ -167,6 +189,7 @@ class SettingsTab(QWidget):
         return (
             self.settings_panel.settings() != self._controller.default()
             or self.log_level_combo.currentText() != self._saved_log_level
+            or self.update_check.isChecked() != self._saved_check_updates
         )
 
     def _on_edited(self, *_args) -> None:
@@ -180,6 +203,9 @@ class SettingsTab(QWidget):
         set_level(level)
         save_log_level(level)
         self._saved_log_level = level
+        checked = self.update_check.isChecked()
+        save_check_updates(checked)
+        self._saved_check_updates = checked
         self.save_btn.setEnabled(False)
         self._status.setText("Saved ✓")
 

@@ -17,6 +17,7 @@ from croppy.models import DEFAULT_APPLIED, EncodeSettings
 _ENCODE_GROUP = "encode"
 _PARALLEL_KEY = "processing/parallel_enabled"
 _LOG_LEVEL_KEY = "logging/level"
+_CHECK_UPDATES_KEY = "updates/check_on_startup"
 
 
 def load_encode_settings() -> EncodeSettings:
@@ -84,3 +85,13 @@ def load_log_level() -> str:
 def save_log_level(level: str) -> None:
     """Persist the chosen log level across sessions."""
     QSettings().setValue(_LOG_LEVEL_KEY, level)
+
+
+def load_check_updates() -> bool:
+    """Whether to check the release channel for a newer Croppy on startup (default: on)."""
+    return QSettings().value(_CHECK_UPDATES_KEY, True, type=bool)
+
+
+def save_check_updates(enabled: bool) -> None:
+    """Persist the startup update-check toggle across sessions."""
+    QSettings().setValue(_CHECK_UPDATES_KEY, enabled)

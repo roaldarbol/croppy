@@ -42,6 +42,11 @@ def run(video: Path | None = None, log_level_override: str | None = None) -> int
         window.open_path(video)
     window.show()
 
+    # Check the release channel for a newer version (honours the Settings toggle).
+    from croppy.gui.update_check import maybe_check_for_updates
+
+    maybe_check_for_updates(window)
+
     # Cancel running ffmpeg jobs on exit so we don't orphan encodes.
     qt_app.aboutToQuit.connect(window.shutdown)
 
