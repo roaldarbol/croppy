@@ -276,7 +276,7 @@ def test_compress_output_folder_is_per_item(qtbot, qapp, test_video: Path, tmp_p
     assert jobs[1].output_path == dir_b / "clip1_compressed.mp4"
 
 
-def test_compress_folder_flattens_with_subfolder_prefix(
+def test_compress_folder_add_uses_plain_names(
     qtbot, qapp, test_video: Path, tmp_path: Path
 ) -> None:
     queue = MagicMock()
@@ -284,10 +284,10 @@ def test_compress_folder_flattens_with_subfolder_prefix(
     tab = CompressTab(CompressionController(), queue)
     qtbot.addWidget(tab)
     root = tmp_path / "clips"
-    (root / "sub").mkdir(parents=True)
+    root.mkdir()
     shutil.copy(test_video, root / "a.mp4")
-    shutil.copy(test_video, root / "sub" / "b.mp4")
-    tab.video_list.add_paths([root])  # a.mp4, sub/b.mp4
+    shutil.copy(test_video, root / "b.mp4")
+    tab.video_list.add_paths([root])  # a.mp4, b.mp4
 
     out_dir = tmp_path / "out"
     out_dir.mkdir()
@@ -297,8 +297,7 @@ def test_compress_folder_flattens_with_subfolder_prefix(
     tab.video_list._list.clearSelection()  # queue all
     tab._queue_jobs()
     names = sorted(c.args[0].output_path.name for c in queue.submit.call_args_list)
-    # Both flatten into out_dir; the nested one bakes its sub-folder into the name.
-    assert names == ["a_compressed.mp4", "sub_b_compressed.mp4"]
+    assert names == ["a_compressed.mp4", "b_compressed.mp4"]
     for call in queue.submit.call_args_list:
         assert call.args[0].output_path.parent == out_dir
 
@@ -315,20 +314,22 @@ def test_compress_batch_dialog_seeds_output_and_settings(
     tab = CompressTab(CompressionController(), queue)
     qtbot.addWidget(tab)
     root = tmp_path / "clips"
-    (root / "sub").mkdir(parents=True)
+    root.mkdir()
     shutil.copy(test_video, root / "a.mp4")
-    shutil.copy(test_video, root / "sub" / "b.mp4")
+    shutil.copy(test_video, root / "b.mp4")
     out_dir = tmp_path / "out"
     out_dir.mkdir()
     settings = EncodeSettings(encoder="libx265", container="mkv")
 
     dialog = MagicMock()
     dialog.exec.return_value = 1  # Accepted
-    dialog.videos.return_value = [root / "a.mp4", root / "sub" / "b.mp4"]
-    dialog.base.return_value = root
+    dialog.videos.return_value = [root / "a.mp4", root / "b.mp4"]
     dialog.output_dir.return_value = out_dir
     dialog.settings.return_value = settings
-    with patch("croppy.gui.compress_tab.BatchAddDialog", return_value=dialog):
+    with (
+        patch("croppy.gui.compress_tab.QFileDialog.getExistingDirectory", return_value=str(root)),
+        patch("croppy.gui.compress_tab.BatchAddDialog", return_value=dialog),
+    ):
         tab._add_batch()
 
     # Every row was seeded with the batch's output folder + settings.
@@ -340,8 +341,8 @@ def test_compress_batch_dialog_seeds_output_and_settings(
 
     tab._queue_jobs()
     outs = sorted(c.args[0].output_path.name for c in queue.submit.call_args_list)
-    # Flattened into out_dir, sub-folder baked into the name, batch container applied.
-    assert outs == ["a_compressed.mkv", "sub_b_compressed.mkv"]
+    # Flattened into out_dir with the batch container applied.
+    assert outs == ["a_compressed.mkv", "b_compressed.mkv"]
 
 
 def test_compress_right_panel_inactive_without_selection(

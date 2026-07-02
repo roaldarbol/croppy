@@ -42,32 +42,33 @@ def is_accepted_video(path: Path) -> bool:
     return path.suffix.lower() in VIDEO_EXTENSIONS and path.is_file()
 
 
-def folder_videos(folder: Path, recursive: bool = True) -> list[Path]:
-    """Every recognized video inside ``folder``, sorted by path (case-insensitive).
+def folder_videos(folder: Path) -> list[Path]:
+    """The recognized videos directly inside ``folder``, sorted by name.
 
-    Recurses into sub-folders by default. Missing/unreadable trees yield nothing.
+    Not recursive — sub-folders are ignored. Missing/unreadable folders yield
+    nothing.
     """
     try:
-        walker = folder.rglob("*") if recursive else folder.glob("*")
-        return sorted((p for p in walker if is_accepted_video(p)), key=lambda p: str(p).lower())
+        return sorted(
+            (p for p in folder.iterdir() if is_accepted_video(p)), key=lambda p: p.name.lower()
+        )
     except OSError as exc:
         logger.warning("Could not scan folder {}: {}", folder, exc)
         return []
 
 
-def expand_video_inputs(paths: Iterable[Path], recursive: bool = True) -> list[Path]:
-    """Expand any directories in ``paths`` into the videos they contain.
+def expand_video_inputs(paths: Iterable[Path]) -> list[Path]:
+    """Expand any directories in ``paths`` into the videos directly inside them.
 
-    A recognized video file passes through unchanged; a directory contributes
-    every video inside it (recursively by default). Input order is preserved and
-    duplicates are dropped, so dropping a folder and one of its files won't queue
-    that file twice.
+    A recognized video file passes through unchanged; a directory contributes the
+    videos it holds (not recursive). Input order is preserved and duplicates are
+    dropped, so dropping a folder and one of its files won't queue it twice.
     """
     out: list[Path] = []
     seen: set[Path] = set()
     for path in paths:
         if path.is_dir():
-            candidates = folder_videos(path, recursive)
+            candidates = folder_videos(path)
         elif is_accepted_video(path):
             candidates = [path]
         else:
@@ -77,21 +78,6 @@ def expand_video_inputs(paths: Iterable[Path], recursive: bool = True) -> list[P
                 seen.add(candidate)
                 out.append(candidate)
     return out
-
-
-def subfolder_prefix(path: Path, root: Path) -> str:
-    """``path``'s sub-folders under ``root`` as a filename prefix (``""`` if none).
-
-    Lets a dropped folder flatten into one output folder without name clashes by
-    baking the sub-tree into the name: ``root/a/b/clip.mp4`` → ``"a_b_"`` (so the
-    output becomes ``a_b_clip…``); an immediate child of ``root`` yields ``""``.
-    """
-    try:
-        rel = path.parent.relative_to(root)
-    except ValueError:
-        return ""
-    parts = rel.parts
-    return "_".join(parts) + "_" if parts else ""
 
 
 def has_accepted_input(urls: Iterable) -> bool:
@@ -238,8 +224,9 @@ class LandingWidget(QWidget):
 def accepted_videos(urls: Iterable) -> list[Path]:
     """Return the local videos named by ``urls``, expanding dropped folders.
 
-    A dropped directory contributes every video it contains (recursively); plain
-    video files pass through. Order is preserved and duplicates are dropped.
+    A dropped directory contributes the videos directly inside it (not
+    recursive); plain video files pass through. Order is preserved and duplicates
+    are dropped.
     """
     local = [Path(url.toLocalFile()) for url in urls if url.isLocalFile()]
     return expand_video_inputs(local)

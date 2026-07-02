@@ -17,7 +17,6 @@ from croppy.gui.landing import (
     folder_videos,
     has_accepted_input,
     is_accepted_video,
-    subfolder_prefix,
 )
 
 
@@ -62,43 +61,30 @@ def test_first_accepted_ignores_non_local_urls() -> None:
     assert first_accepted([QUrl("https://example.com/foo.mp4")]) is None
 
 
-def test_folder_videos_recurses_and_sorts(tmp_path: Path) -> None:
+def test_folder_videos_sorts_and_skips_subdirs(tmp_path: Path) -> None:
     _make(tmp_path, name="b")
     _make(tmp_path, name="a")
-    _make(tmp_path / "sub", name="c")
+    _make(tmp_path / "sub", name="c")  # in a sub-folder → ignored (not recursive)
     (tmp_path / "notes.txt").write_text("nope")
     found = folder_videos(tmp_path)
-    assert [p.name for p in found] == ["a.mp4", "b.mp4", "c.mp4"]
-
-
-def test_folder_videos_non_recursive_skips_subdirs(tmp_path: Path) -> None:
-    _make(tmp_path, name="a")
-    _make(tmp_path / "sub", name="c")
-    found = folder_videos(tmp_path, recursive=False)
-    assert [p.name for p in found] == ["a.mp4"]
+    assert [p.name for p in found] == ["a.mp4", "b.mp4"]
 
 
 def test_expand_video_inputs_expands_folders_and_dedupes(tmp_path: Path) -> None:
     a = _make(tmp_path, name="a")
-    _make(tmp_path / "sub", name="c")
+    _make(tmp_path, name="b")
+    _make(tmp_path / "sub", name="c")  # sub-folder video is not included
     # The folder and one of its files: the file must not be queued twice.
     result = expand_video_inputs([tmp_path, a])
-    assert [p.name for p in result] == ["a.mp4", "c.mp4"]
-
-
-def test_subfolder_prefix_bakes_subdirs_into_name(tmp_path: Path) -> None:
-    top = _make(tmp_path, name="top")
-    nested = _make(tmp_path / "a" / "b", name="deep")
-    assert subfolder_prefix(top, tmp_path) == ""  # immediate child → no prefix
-    assert subfolder_prefix(nested, tmp_path) == "a_b_"
-    assert subfolder_prefix(nested, tmp_path / "other") == ""  # not under root
+    assert [p.name for p in result] == ["a.mp4", "b.mp4"]
 
 
 def test_accepted_videos_expands_a_dropped_folder(tmp_path: Path) -> None:
     _make(tmp_path, name="a")
-    _make(tmp_path / "sub", name="c")
+    _make(tmp_path, name="b")
+    _make(tmp_path / "sub", name="c")  # sub-folder video is not included
     urls = [QUrl.fromLocalFile(str(tmp_path))]
-    assert [p.name for p in accepted_videos(urls)] == ["a.mp4", "c.mp4"]
+    assert [p.name for p in accepted_videos(urls)] == ["a.mp4", "b.mp4"]
 
 
 def test_has_accepted_input_true_for_folder_without_walking(tmp_path: Path) -> None:

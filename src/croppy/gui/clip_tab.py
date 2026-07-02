@@ -17,6 +17,7 @@ from PySide6.QtCore import QRectF, Qt, Signal
 from PySide6.QtGui import QImage
 from PySide6.QtWidgets import (
     QDialog,
+    QFileDialog,
     QHBoxLayout,
     QListWidget,
     QMessageBox,
@@ -35,7 +36,6 @@ from croppy.gui.batch_dialog import BatchAddDialog
 from croppy.gui.compression_panel import CompressionController
 from croppy.gui.constants import PANEL_MARGIN, panel_header
 from croppy.gui.editor import EditorWidget
-from croppy.gui.landing import subfolder_prefix
 from croppy.gui.media_loader import MediaLoader
 from croppy.jobs.job import ClipJob
 from croppy.jobs.queue import JobQueue
@@ -127,23 +127,17 @@ class ClipTab(QWidget):
         paths: list[Path],
         output_dir: Path | None = None,
         settings: EncodeSettings | None = None,
-        root: Path | None = None,
     ) -> None:
         """Open several videos as list entries, keeping the first one selected.
 
-        For a batch add (``root`` set), every editor shares ``output_dir`` and
-        ``settings``, and each output name is prefixed with the video's
-        sub-folders under ``root`` so the batch can flatten without clashing.
+        For a batch add, every editor shares ``output_dir`` and ``settings`` so
+        the user doesn't have to redirect each one by hand.
         """
         if not paths:
             return
         first_row = len(self._videos)
         for path in paths:
-            name = None
-            if root is not None:
-                prefix = subfolder_prefix(path, root)
-                name = f"{prefix}{path.stem}" if prefix else None
-            self.open_video(path, output_dir=output_dir, settings=settings, name=name)
+            self.open_video(path, output_dir=output_dir, settings=settings)
         if first_row < len(self._videos):
             self.videos_list.setCurrentRow(first_row)
 
@@ -152,7 +146,6 @@ class ClipTab(QWidget):
         path: Path,
         output_dir: Path | None = None,
         settings: EncodeSettings | None = None,
-        name: str | None = None,
     ) -> None:
         logger.info("Crop: opening {}", path)
         editor = EditorWidget(controller=self._controller)
@@ -164,13 +157,11 @@ class ClipTab(QWidget):
                 return
             info, image = result
             editor.load(info, image)
-            # Apply batch overrides after load() (which reseeds output/name/encoding).
+            # Apply batch overrides after load() (which reseeds output + encoding).
             if output_dir is not None:
                 editor.set_output_dir(output_dir)
             if settings is not None:
                 editor.compression.adopt(settings)
-            if name:
-                editor.output_picker.set_filename(name)
             self.video_ready.emit(editor)
 
         def failed(message: str) -> None:
@@ -205,16 +196,17 @@ class ClipTab(QWidget):
         self._placeholder._browse_input_videos()
 
     def _browse_folder(self) -> None:
-        # A folder is a batch: pick source + output + shared encoding once, then
-        # open each video as its own editor (crops/trims are still per video).
-        dialog = BatchAddDialog(self._controller, parent=self)
+        # Pick the source folder like picking files, then configure the batch
+        # (output + shared encoding) once; each video still opens as its own
+        # editor so crops/trims stay per video.
+        folder = QFileDialog.getExistingDirectory(self, "Choose a folder of videos")
+        if not folder:
+            return
+        dialog = BatchAddDialog(self._controller, Path(folder), self)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         self.open_videos(
-            dialog.videos(),
-            output_dir=dialog.output_dir(),
-            settings=dialog.settings(),
-            root=dialog.base(),
+            dialog.videos(), output_dir=dialog.output_dir(), settings=dialog.settings()
         )
 
     def _duplicate_current(self) -> None:

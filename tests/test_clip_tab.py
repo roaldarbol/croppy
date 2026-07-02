@@ -43,45 +43,46 @@ def test_browse_folder_runs_batch_dialog(qtbot, qapp, test_video: Path, tmp_path
     tab = ClipTab(CompressionController(), MagicMock())
     qtbot.addWidget(tab)
     root = tmp_path / "clips"
-    (root / "sub").mkdir(parents=True)
+    root.mkdir()
     a = _copy(test_video, root / "a.mp4")
-    c = _copy(test_video, root / "sub" / "c.mp4")
+    b = _copy(test_video, root / "b.mp4")
     out = tmp_path / "out"
     settings = EncodeSettings()
     # Stand in for the modal dialog: accepted, with a scanned batch.
     dialog = MagicMock()
     dialog.exec.return_value = 1  # QDialog.DialogCode.Accepted
-    dialog.videos.return_value = [a, c]
-    dialog.base.return_value = root
+    dialog.videos.return_value = [a, b]
     dialog.output_dir.return_value = out
     dialog.settings.return_value = settings
-    with patch("croppy.gui.clip_tab.BatchAddDialog", return_value=dialog):
+    with (
+        patch("croppy.gui.clip_tab.QFileDialog.getExistingDirectory", return_value=str(root)),
+        patch("croppy.gui.clip_tab.BatchAddDialog", return_value=dialog),
+    ):
         tab.open_videos = MagicMock()
         tab._browse_folder()
-    tab.open_videos.assert_called_once_with([a, c], output_dir=out, settings=settings, root=root)
+    tab.open_videos.assert_called_once_with([a, b], output_dir=out, settings=settings)
 
 
-def test_open_videos_batch_applies_output_and_prefixed_name(
+def test_open_videos_batch_applies_shared_output(
     qtbot, qapp, test_video: Path, tmp_path: Path
 ) -> None:
     tab = ClipTab(CompressionController(), MagicMock())
     qtbot.addWidget(tab)
     root = tmp_path / "clips"
-    (root / "sub").mkdir(parents=True)
+    root.mkdir()
     a = _copy(test_video, root / "a.mp4")
-    c = _copy(test_video, root / "sub" / "c.mp4")
+    b = _copy(test_video, root / "b.mp4")
     out = tmp_path / "out"
     out.mkdir()
     # open_video's loader callback runs async; wait until both editors have loaded.
     ready: list = []
     tab.video_ready.connect(ready.append)
-    tab.open_videos([a, c], output_dir=out, root=root)
+    tab.open_videos([a, b], output_dir=out)
     qtbot.waitUntil(lambda: len(ready) == 2, timeout=5000)
     editors = [v.editor for v in tab._videos]
+    # Every editor shares the batch output folder; names stay the plain source stem.
     assert [e.output_dir() for e in editors] == [out, out]
-    # The nested video bakes its sub-folder into the name; the top-level one doesn't.
-    assert editors[0].output_name() == "a"
-    assert editors[1].output_name() == "sub_c"
+    assert sorted(e.output_name() for e in editors) == ["a", "b"]
 
 
 def test_open_videos_lists_all_and_selects_first(

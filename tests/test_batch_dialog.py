@@ -1,4 +1,4 @@
-"""Tests for the batch-add dialog (folder scan + shared output/encoding)."""
+"""Tests for the batch-add dialog (output folder + shared encoding)."""
 
 from __future__ import annotations
 
@@ -16,36 +16,32 @@ def _video(path: Path) -> Path:
     return path
 
 
-def test_batch_dialog_scans_source_and_enables_add(qtbot, qapp, tmp_path: Path) -> None:
+def test_batch_dialog_lists_folder_videos_and_enables_confirm(qtbot, qapp, tmp_path: Path) -> None:
     root = tmp_path / "clips"
     _video(root / "a.mp4")
-    _video(root / "sub" / "c.mp4")
-    dlg = BatchAddDialog(CompressionController())
+    _video(root / "b.mp4")
+    _video(root / "sub" / "c.mp4")  # sub-folder video is ignored (not recursive)
+    dlg = BatchAddDialog(CompressionController(), root)
     qtbot.addWidget(dlg)
     ok = dlg.buttons.button(QDialogButtonBox.StandardButton.Ok)
-    # Nothing chosen yet → Add is disabled.
-    assert not ok.isEnabled()
-
-    dlg.source_picker.set_output_dir(root)
-    assert [p.name for p in dlg.videos()] == ["a.mp4", "c.mp4"]
-    assert dlg.base() == root
+    assert ok.text() == "Confirm"
     assert ok.isEnabled()
+    assert [p.name for p in dlg.videos()] == ["a.mp4", "b.mp4"]
 
 
-def test_batch_dialog_recursion_toggle(qtbot, qapp, tmp_path: Path) -> None:
-    root = tmp_path / "clips"
-    _video(root / "a.mp4")
-    _video(root / "sub" / "c.mp4")
-    dlg = BatchAddDialog(CompressionController())
+def test_batch_dialog_confirm_disabled_for_empty_folder(qtbot, qapp, tmp_path: Path) -> None:
+    root = tmp_path / "empty"
+    root.mkdir()
+    dlg = BatchAddDialog(CompressionController(), root)
     qtbot.addWidget(dlg)
-    dlg.source_picker.set_output_dir(root)
-    assert len(dlg.videos()) == 2
-    dlg.recursive_check.setChecked(False)
-    assert [p.name for p in dlg.videos()] == ["a.mp4"]
+    assert dlg.videos() == []
+    assert not dlg.buttons.button(QDialogButtonBox.StandardButton.Ok).isEnabled()
 
 
 def test_batch_dialog_output_dir_optional(qtbot, qapp, tmp_path: Path) -> None:
-    dlg = BatchAddDialog(CompressionController())
+    root = tmp_path / "clips"
+    _video(root / "a.mp4")
+    dlg = BatchAddDialog(CompressionController(), root)
     qtbot.addWidget(dlg)
     # No output folder chosen → None (write next to each source).
     assert dlg.output_dir() is None

@@ -35,7 +35,7 @@ from croppy.ffmpeg.preview import probe_with_first_frame
 from croppy.ffmpeg.probe import VideoInfo
 from croppy.gui.constants import PANEL_HEADER_HEIGHT, PANEL_MARGIN
 from croppy.gui.drop_hint import DropHint
-from croppy.gui.landing import file_dialog_filter, folder_videos, is_accepted_video
+from croppy.gui.landing import expand_video_inputs, file_dialog_filter, is_accepted_video
 from croppy.gui.media_loader import MediaLoader
 from croppy.gui.theme import (
     border_color,
@@ -50,9 +50,6 @@ _NAME_ROLE = Qt.ItemDataRole.UserRole + 2
 _DETAIL_ROLE = Qt.ItemDataRole.UserRole + 3
 _DATA_ROLE = Qt.ItemDataRole.UserRole + 4
 _SUMMARY_ROLE = Qt.ItemDataRole.UserRole + 5
-# The folder a row was added under, so a chosen output folder can mirror the
-# source's sub-tree (see VideoList.item_root). Defaults to the file's own parent.
-_ROOT_ROLE = Qt.ItemDataRole.UserRole + 6
 
 _THUMB = QSize(160, 90)
 _PAD = 6
@@ -308,42 +305,20 @@ class VideoList(QWidget):
     def add_paths(self, paths: list[Path]) -> None:
         """Add the given videos; any directory is expanded to the videos it holds.
 
-        A directory contributes every video inside it (recursively) and becomes
-        those rows' *root*, so a chosen output folder can mirror the sub-tree (see
-        :meth:`item_root`). A plain video file is its own root's child.
+        A directory contributes the videos directly inside it (not recursive).
         """
-        new_rows: list[int] = []
-        for entry in paths:
-            if entry.is_dir():
-                videos = [(v, entry) for v in folder_videos(entry)]
-            elif is_accepted_video(entry):
-                videos = [(entry, entry.parent)]
-            else:
-                videos = []
-            for path, root in videos:
-                item = self._make_item(path, "Loading…", QPixmap())
-                item.setData(_ROOT_ROLE, root)
-                self._list.addItem(item)
-                new_rows.append(self._list.count() - 1)
-                self._load_item(item, path)
-        if new_rows:
-            self._update_empty()
-            self.items_added.emit(new_rows)
-            self.changed.emit()
+        self.add_batch(expand_video_inputs(paths))
 
-    def add_batch(self, videos: list[Path], root: Path) -> list[int]:
-        """Add ``videos`` as rows sharing ``root`` and return their row indices.
+    def add_batch(self, videos: list[Path]) -> list[int]:
+        """Add pre-resolved ``videos`` as rows and return their row indices.
 
-        Used by the batch-add dialog: the caller has already scanned ``root`` and
-        wants every video filed under it, so each output can bake ``root``'s
-        sub-folders into its name (see :meth:`item_root`).
+        Used by the batch-add dialog, which has already scanned the folder.
         """
         new_rows: list[int] = []
         for path in videos:
             if not is_accepted_video(path):
                 continue
             item = self._make_item(path, "Loading…", QPixmap())
-            item.setData(_ROOT_ROLE, root)
             self._list.addItem(item)
             new_rows.append(self._list.count() - 1)
             self._load_item(item, path)
@@ -352,18 +327,6 @@ class VideoList(QWidget):
             self.items_added.emit(new_rows)
             self.changed.emit()
         return new_rows
-
-    def item_root(self, row: int) -> Path:
-        """The folder ``row`` was added under (its own parent for a lone file).
-
-        The video's location relative to this root is what a chosen output folder
-        mirrors, so recursively-added folders keep their structure in the output.
-        """
-        item = self._list.item(row)
-        root = item.data(_ROOT_ROLE) if item is not None else None
-        if isinstance(root, Path):
-            return root
-        return self.paths()[row].parent
 
     def clear(self) -> None:
         if self._list.count():
@@ -390,7 +353,6 @@ class VideoList(QWidget):
             )
             clone.setData(_DATA_ROLE, src.data(_DATA_ROLE))
             clone.setData(_SUMMARY_ROLE, src.data(_SUMMARY_ROLE))
-            clone.setData(_ROOT_ROLE, src.data(_ROOT_ROLE))
             self._list.insertItem(row + 1, clone)
             inserted = True
         if inserted:
@@ -411,7 +373,7 @@ class VideoList(QWidget):
         if not folder:
             return
         self._last_dir = folder
-        # add_paths expands the directory into the videos it contains (recursively).
+        # add_paths expands the directory into the videos directly inside it.
         self.add_paths([Path(folder)])
 
     # --- Qt overrides -------------------------------------------------------

@@ -16,6 +16,7 @@ from loguru import logger
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QDialog,
+    QFileDialog,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -33,7 +34,6 @@ from croppy.gui.compression_panel import (
     summarize_settings,
 )
 from croppy.gui.constants import PANEL_HEADER_HEIGHT, PANEL_MARGIN, SIDEBAR_DESCRIPTION_HEIGHT
-from croppy.gui.landing import subfolder_prefix
 from croppy.gui.output_picker import OutputFolderPicker
 from croppy.gui.status_flash import StatusFlash, queued_message
 from croppy.gui.video_list import VideoList
@@ -142,12 +142,15 @@ class CompressTab(QWidget):
         sub-folders are baked into the output name at queue time so the batch can
         flatten into that one folder without clashing.
         """
-        dialog = BatchAddDialog(self._controller, parent=self)
+        folder = QFileDialog.getExistingDirectory(self, "Choose a folder of videos")
+        if not folder:
+            return
+        dialog = BatchAddDialog(self._controller, Path(folder), self)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         settings = dialog.settings()
         output_dir = dialog.output_dir()
-        rows = self.video_list.add_batch(dialog.videos(), dialog.base())
+        rows = self.video_list.add_batch(dialog.videos())
         for row in rows:
             self.video_list.set_item_data(
                 row, _ItemConfig(settings, output_dir, ""), summarize_settings(settings)
@@ -193,8 +196,7 @@ class CompressTab(QWidget):
             else:
                 self.output_picker.dir_edit.setText("")
             if single:
-                prefix = subfolder_prefix(paths[row], self.video_list.item_root(row))
-                self.output_picker.set_filename(cfg.name or f"{prefix}{paths[row].stem}_compressed")
+                self.output_picker.set_filename(cfg.name or f"{paths[row].stem}_compressed")
             else:
                 self.output_picker.set_filename("")
         finally:
@@ -268,10 +270,7 @@ class CompressTab(QWidget):
                 duration = 0.0
                 settings = cfg.settings
             parent = cfg.output_dir if cfg.output_dir is not None else path.parent
-            # A video added via a folder bakes its sub-folders into the name, so a
-            # recursive add can flatten into one folder without clashing.
-            prefix = subfolder_prefix(path, self.video_list.item_root(row))
-            fallback = f"{prefix}{path.stem}_compressed"
+            fallback = f"{path.stem}_compressed"
             stem = safe_stem(cfg.name.strip() or fallback, fallback)
             base = parent / f"{stem}.{settings.container}"
             output_path = unique_output_path(base, taken)
