@@ -106,6 +106,33 @@ class JobQueue(QObject):
             logger.info("Canceled job {}", job_id)
             self.job_canceled.emit(job_id)
 
+    def reorder_queued(self, ordered_ids: list[int]) -> None:
+        """Reorder the staged (QUEUED) jobs to match ``ordered_ids`` (top→bottom).
+
+        Only the release order of not-yet-started jobs changes; running, pending,
+        and finished jobs keep their slots. Ids that are missing or no longer
+        QUEUED are ignored, and any queued job not named is left after the rest in
+        its existing relative order — so a partial list still does the right thing.
+        """
+        wanted = [
+            jid
+            for jid in ordered_ids
+            if (job := self._jobs.get(jid)) is not None and job.state == JobState.QUEUED
+        ]
+        queued_now = [jid for jid, job in self._jobs.items() if job.state == JobState.QUEUED]
+        seen = set(wanted)
+        sequence = iter(wanted + [jid for jid in queued_now if jid not in seen])
+        # Rewrite _jobs, dropping each queued job into the next slot a queued job
+        # currently occupies, so non-queued jobs keep their positions.
+        reordered: dict[int, Job] = {}
+        for jid, job in self._jobs.items():
+            if job.state == JobState.QUEUED:
+                nxt = next(sequence)
+                reordered[nxt] = self._jobs[nxt]
+            else:
+                reordered[jid] = job
+        self._jobs = reordered
+
     def set_max_workers(self, n: int) -> None:
         """Change how many jobs may run at once. Raising it can immediately
         start more pending jobs; lowering it only affects future starts."""
