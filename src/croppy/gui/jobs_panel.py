@@ -63,6 +63,12 @@ _W_PROGRESS = 150
 _W_STATUS = 84
 _W_CANCEL = 74
 
+# Shared row geometry so the header, rows, and detail panel all line up.
+_ROW_HMARGIN = 4
+_ROW_SPACING = 8
+# X where the Type column starts (arrow + check + # columns, with the gaps).
+_TYPE_X = _ROW_HMARGIN + _W_ARROW + _ROW_SPACING + _W_CHECK + _ROW_SPACING + _W_NUM + _ROW_SPACING
+
 
 def _job_detail_lines(job: Job) -> list[tuple[str, str]]:
     """Label/value pairs shown in a row's expandable detail panel."""
@@ -158,8 +164,8 @@ class JobRow(QWidget):
         self._header = _RowHeader(job.id)
         self._header.clicked.connect(self.toggle_detail)
         h = QHBoxLayout(self._header)
-        h.setContentsMargins(4, 2, 4, 2)
-        h.setSpacing(8)
+        h.setContentsMargins(_ROW_HMARGIN, 2, _ROW_HMARGIN, 2)
+        h.setSpacing(_ROW_SPACING)
 
         self.arrow_btn = QToolButton()
         self.arrow_btn.setAutoRaise(True)
@@ -224,14 +230,16 @@ class JobRow(QWidget):
         panel = QWidget()
         panel.setStyleSheet("QLabel { color: #aaa; }")
         grid = QGridLayout(panel)
-        grid.setContentsMargins(4 + _W_ARROW + 8, 0, 4, 6)  # indent under the arrow
-        grid.setHorizontalSpacing(8)
+        # Keys line up under the Type column; values under the Name column.
+        grid.setContentsMargins(_TYPE_X, 0, _ROW_HMARGIN, 6)
+        grid.setHorizontalSpacing(_ROW_SPACING)
         grid.setVerticalSpacing(2)
+        grid.setColumnMinimumWidth(0, _W_TYPE)
         grid.setColumnStretch(1, 1)
         for r, (key, value) in enumerate(_job_detail_lines(self._job)):
             k = QLabel(f"{key}:")
             k.setStyleSheet("color: #888; font-weight: bold;")
-            k.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
+            k.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
             v = QLabel(value)
             v.setWordWrap(True)
             v.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
@@ -529,11 +537,21 @@ class JobsPanel(QWidget):
         self._update_buttons()
 
     def _column_header(self) -> QWidget:
-        """A non-scrolling-looking title row whose columns line up with the rows."""
+        """A title row whose columns line up with the rows.
+
+        It mirrors the row layout exactly — fixed-width placeholder widgets for
+        the arrow/checkbox/cancel columns and the same margins/spacing — so each
+        title (and the right-aligned #) sits over its column's content.
+        """
         head = QWidget()
         h = QHBoxLayout(head)
-        h.setContentsMargins(4, 2, 4, 2)
-        h.setSpacing(8)
+        h.setContentsMargins(_ROW_HMARGIN, 2, _ROW_HMARGIN, 2)
+        h.setSpacing(_ROW_SPACING)
+
+        def _spacer(width: int) -> QWidget:
+            w = QWidget()
+            w.setFixedWidth(width)
+            return w
 
         def _title(text: str, width: int, align=Qt.AlignmentFlag.AlignLeft) -> QLabel:
             lbl = QLabel(text)
@@ -542,8 +560,8 @@ class JobsPanel(QWidget):
             lbl.setStyleSheet("color: #888; font-weight: bold;")
             return lbl
 
-        h.addSpacing(_W_ARROW)
-        h.addSpacing(_W_CHECK)
+        h.addWidget(_spacer(_W_ARROW))
+        h.addWidget(_spacer(_W_CHECK))
         h.addWidget(_title("#", _W_NUM, Qt.AlignmentFlag.AlignRight))
         h.addWidget(_title("Type", _W_TYPE, Qt.AlignmentFlag.AlignCenter))
         name = QLabel("Name")
@@ -551,7 +569,7 @@ class JobsPanel(QWidget):
         h.addWidget(name, 1)
         h.addWidget(_title("Progress", _W_PROGRESS))
         h.addWidget(_title("Status", _W_STATUS))
-        h.addSpacing(_W_CANCEL)
+        h.addWidget(_spacer(_W_CANCEL))
         return head
 
     # --- public API ---------------------------------------------------------

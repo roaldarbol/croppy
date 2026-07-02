@@ -220,6 +220,20 @@ def test_started_row_loses_its_number(qtbot, qapp, tmp_path: Path) -> None:
     assert panel.rows()[0].num_label.text() == ""
 
 
+def test_only_queued_rows_are_draggable(qtbot, qapp, tmp_path: Path) -> None:
+    queue = JobQueue()
+    panel = JobsPanel(queue)
+    qtbot.addWidget(panel)
+    job = _crop(tmp_path / "a.mp4")
+    queue.submit(job)
+    row = panel.rows()[0]
+    assert row._header._draggable  # queued → draggable
+    queue.job_started.emit(job.id)
+    assert not row._header._draggable  # running → not draggable
+    queue.job_finished.emit(job.id)
+    assert not row._header._draggable  # finished → not draggable
+
+
 def test_clicking_arrow_expands_detail(qtbot, qapp, tmp_path: Path) -> None:
     queue = JobQueue()
     panel = JobsPanel(queue)
