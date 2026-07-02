@@ -303,6 +303,47 @@ def test_compress_folder_flattens_with_subfolder_prefix(
         assert call.args[0].output_path.parent == out_dir
 
 
+def test_compress_batch_dialog_seeds_output_and_settings(
+    qtbot, qapp, test_video: Path, tmp_path: Path
+) -> None:
+    from unittest.mock import patch
+
+    from croppy.models import EncodeSettings
+
+    queue = MagicMock()
+    queue.jobs.return_value = []
+    tab = CompressTab(CompressionController(), queue)
+    qtbot.addWidget(tab)
+    root = tmp_path / "clips"
+    (root / "sub").mkdir(parents=True)
+    shutil.copy(test_video, root / "a.mp4")
+    shutil.copy(test_video, root / "sub" / "b.mp4")
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    settings = EncodeSettings(encoder="libx265", container="mkv")
+
+    dialog = MagicMock()
+    dialog.exec.return_value = 1  # Accepted
+    dialog.videos.return_value = [root / "a.mp4", root / "sub" / "b.mp4"]
+    dialog.base.return_value = root
+    dialog.output_dir.return_value = out_dir
+    dialog.settings.return_value = settings
+    with patch("croppy.gui.compress_tab.BatchAddDialog", return_value=dialog):
+        tab._add_batch()
+
+    # Every row was seeded with the batch's output folder + settings.
+    assert tab.video_list.count() == 2
+    for row in range(2):
+        cfg = tab._item_config(row)
+        assert cfg.output_dir == out_dir
+        assert cfg.settings == settings
+
+    tab._queue_jobs()
+    outs = sorted(c.args[0].output_path.name for c in queue.submit.call_args_list)
+    # Flattened into out_dir, sub-folder baked into the name, batch container applied.
+    assert outs == ["a_compressed.mkv", "sub_b_compressed.mkv"]
+
+
 def test_compress_right_panel_inactive_without_selection(
     qtbot, qapp, test_video: Path, tmp_path: Path
 ) -> None:

@@ -331,6 +331,28 @@ class VideoList(QWidget):
             self.items_added.emit(new_rows)
             self.changed.emit()
 
+    def add_batch(self, videos: list[Path], root: Path) -> list[int]:
+        """Add ``videos`` as rows sharing ``root`` and return their row indices.
+
+        Used by the batch-add dialog: the caller has already scanned ``root`` and
+        wants every video filed under it, so each output can bake ``root``'s
+        sub-folders into its name (see :meth:`item_root`).
+        """
+        new_rows: list[int] = []
+        for path in videos:
+            if not is_accepted_video(path):
+                continue
+            item = self._make_item(path, "Loading…", QPixmap())
+            item.setData(_ROOT_ROLE, root)
+            self._list.addItem(item)
+            new_rows.append(self._list.count() - 1)
+            self._load_item(item, path)
+        if new_rows:
+            self._update_empty()
+            self.items_added.emit(new_rows)
+            self.changed.emit()
+        return new_rows
+
     def item_root(self, row: int) -> Path:
         """The folder ``row`` was added under (its own parent for a lone file).
 

@@ -15,6 +15,7 @@ from pathlib import Path
 from loguru import logger
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QDialog,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -25,6 +26,7 @@ from PySide6.QtWidgets import (
 
 from croppy.ffmpeg.clip import safe_stem, unique_output_path
 from croppy.ffmpeg.probe import ProbeError, probe
+from croppy.gui.batch_dialog import BatchAddDialog
 from croppy.gui.compression_panel import (
     CompressionController,
     CompressionPanel,
@@ -73,6 +75,10 @@ class CompressTab(QWidget):
         self.video_list.changed.connect(self._on_list_changed)
         self.video_list.items_added.connect(self._seed_new_items)
         self.video_list.selection_changed.connect(self._load_selection_into_panel)
+        # Adding a folder here opens the batch dialog (source + output + encoding
+        # for the whole lot) rather than the plain per-file add.
+        self.video_list.add_folder_btn.clicked.disconnect(self.video_list.open_folder_dialog)
+        self.video_list.add_folder_btn.clicked.connect(self._add_batch)
         splitter.addWidget(self.video_list)
 
         side = QWidget(splitter)
@@ -126,6 +132,26 @@ class CompressTab(QWidget):
         splitter.setStretchFactor(1, 0)
         splitter.setSizes([800, 300])
         layout.addWidget(splitter)
+
+    # --- batch add ----------------------------------------------------------
+
+    def _add_batch(self) -> None:
+        """Add a folder of videos with one shared output folder + encoding.
+
+        Each row is seeded with the batch's settings and output folder; its
+        sub-folders are baked into the output name at queue time so the batch can
+        flatten into that one folder without clashing.
+        """
+        dialog = BatchAddDialog(self._controller, parent=self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        settings = dialog.settings()
+        output_dir = dialog.output_dir()
+        rows = self.video_list.add_batch(dialog.videos(), dialog.base())
+        for row in rows:
+            self.video_list.set_item_data(
+                row, _ItemConfig(settings, output_dir, ""), summarize_settings(settings)
+            )
 
     # --- per-item settings --------------------------------------------------
 

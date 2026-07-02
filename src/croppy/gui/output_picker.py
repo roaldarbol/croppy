@@ -33,9 +33,10 @@ class OutputFolderPicker(QGroupBox):
         default_filename: str = "",
         filename_label: str = "Name",
         filename_tooltip: str = "",
+        title: str = "Output",
         parent: QWidget | None = None,
     ) -> None:
-        super().__init__("Output", parent)
+        super().__init__(title, parent)
         grid = QGridLayout(self)
         grid.setContentsMargins(8, 8, 8, 8)
         grid.setHorizontalSpacing(6)
