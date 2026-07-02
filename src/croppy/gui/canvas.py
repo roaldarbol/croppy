@@ -7,6 +7,8 @@ Empty-area click-drag creates a new crop; clicking on a crop selects it
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QBrush, QColor, QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
@@ -21,7 +23,7 @@ from PySide6.QtWidgets import (
 
 from croppy.gui.crop_item import CropRectItem
 from croppy.gui.drop_hint import DropHint
-from croppy.gui.landing import accepted_videos, has_accepted_input
+from croppy.gui.landing import accepted_videos, has_accepted_input, single_dropped_folder
 from croppy.gui.theme import primary_surface, watch_app_palette
 
 _DRAFT_MIN_SIDE = 6.0
@@ -32,6 +34,7 @@ class VideoCanvas(QGraphicsView):
     crops_changed = Signal()
     selection_changed = Signal(object)  # CropRectItem | None
     videos_dropped = Signal(list)  # video files (list[Path]) dropped / chosen here
+    folder_dropped = Signal(Path)  # a single folder dropped (opens the batch dialog)
     browse_requested = Signal()  # empty canvas clicked
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -173,7 +176,13 @@ class VideoCanvas(QGraphicsView):
             event.ignore()
 
     def dropEvent(self, event) -> None:
-        paths = accepted_videos(event.mimeData().urls())
+        urls = event.mimeData().urls()
+        folder = single_dropped_folder(urls)
+        if folder is not None:
+            event.acceptProposedAction()
+            self.folder_dropped.emit(folder)
+            return
+        paths = accepted_videos(urls)
         if not paths:
             event.ignore()
             return

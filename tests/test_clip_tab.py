@@ -63,6 +63,30 @@ def test_browse_folder_runs_batch_dialog(qtbot, qapp, test_video: Path, tmp_path
     tab.open_videos.assert_called_once_with([a, b], output_dir=out, settings=settings)
 
 
+def test_folder_dropped_on_canvas_opens_batch(
+    qtbot, qapp, test_video: Path, tmp_path: Path
+) -> None:
+    from croppy.models import EncodeSettings
+
+    tab = ClipTab(CompressionController(), MagicMock())
+    qtbot.addWidget(tab)
+    folder = tmp_path / "clips"
+    folder.mkdir()
+    a = _copy(test_video, folder / "a.mp4")
+    out = tmp_path / "out"
+    settings = EncodeSettings()
+    dialog = MagicMock()
+    dialog.exec.return_value = 1  # Accepted
+    dialog.videos.return_value = [a]
+    dialog.output_dir.return_value = out
+    dialog.settings.return_value = settings
+    with patch("croppy.gui.clip_tab.BatchAddDialog", return_value=dialog):
+        tab.open_videos = MagicMock()
+        # Simulate the canvas forwarding a dropped folder up to the tab.
+        tab._placeholder.folder_dropped.emit(folder)
+    tab.open_videos.assert_called_once_with([a], output_dir=out, settings=settings)
+
+
 def test_open_videos_batch_applies_shared_output(
     qtbot, qapp, test_video: Path, tmp_path: Path
 ) -> None:

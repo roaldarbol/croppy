@@ -80,6 +80,18 @@ def expand_video_inputs(paths: Iterable[Path]) -> list[Path]:
     return out
 
 
+def single_dropped_folder(urls: Iterable) -> Path | None:
+    """The lone directory in a drop, or ``None`` if it isn't exactly one folder.
+
+    A single dropped folder opens the batch dialog; anything else (files, or a
+    mix) is a plain quick-add.
+    """
+    local = [Path(url.toLocalFile()) for url in urls if url.isLocalFile()]
+    if len(local) == 1 and local[0].is_dir():
+        return local[0]
+    return None
+
+
 def has_accepted_input(urls: Iterable) -> bool:
     """Whether any URL is a local video file *or* a directory (a cheap check for
     drag-accept: it never walks a folder, unlike :func:`accepted_videos`)."""

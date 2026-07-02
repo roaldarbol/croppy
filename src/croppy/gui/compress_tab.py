@@ -75,10 +75,12 @@ class CompressTab(QWidget):
         self.video_list.changed.connect(self._on_list_changed)
         self.video_list.items_added.connect(self._seed_new_items)
         self.video_list.selection_changed.connect(self._load_selection_into_panel)
-        # Adding a folder here opens the batch dialog (source + output + encoding
-        # for the whole lot) rather than the plain per-file add.
+        # Adding a folder here — by button or by dropping one on the list — opens
+        # the batch dialog (output + encoding for the whole lot) rather than the
+        # plain per-file add.
         self.video_list.add_folder_btn.clicked.disconnect(self.video_list.open_folder_dialog)
         self.video_list.add_folder_btn.clicked.connect(self._add_batch)
+        self.video_list.folder_dropped.connect(self._open_batch)
         splitter.addWidget(self.video_list)
 
         side = QWidget(splitter)
@@ -136,16 +138,17 @@ class CompressTab(QWidget):
     # --- batch add ----------------------------------------------------------
 
     def _add_batch(self) -> None:
-        """Add a folder of videos with one shared output folder + encoding.
-
-        Each row is seeded with the batch's settings and output folder; its
-        sub-folders are baked into the output name at queue time so the batch can
-        flatten into that one folder without clashing.
-        """
+        """Pick a folder, then add its videos with one shared output + encoding."""
         folder = QFileDialog.getExistingDirectory(self, "Choose a folder of videos")
-        if not folder:
-            return
-        dialog = BatchAddDialog(self._controller, Path(folder), self)
+        if folder:
+            self._open_batch(Path(folder))
+
+    def _open_batch(self, folder: Path) -> None:
+        """Configure the batch for ``folder`` and seed each new row with it.
+
+        Shared by the "Add folder…" button and by dropping a folder on the list.
+        """
+        dialog = BatchAddDialog(self._controller, folder, self)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         settings = dialog.settings()

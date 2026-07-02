@@ -109,6 +109,7 @@ class ClipTab(QWidget):
         self.stack = QStackedWidget(splitter)
         self._placeholder = EditorWidget(controller=controller)
         self._placeholder.videos_change_requested.connect(self.open_videos)
+        self._placeholder.folder_dropped.connect(self._open_folder_batch)
         self.stack.addWidget(self._placeholder)
 
         splitter.addWidget(left)
@@ -183,6 +184,7 @@ class ClipTab(QWidget):
         editor.process_requested.connect(lambda e=editor: self._queue_editor(e))
         editor.frame_change_requested.connect(lambda n, e=editor: self._reload(e, n))
         editor.videos_change_requested.connect(self.open_videos)  # drop more → open them
+        editor.folder_dropped.connect(self._open_folder_batch)  # drop a folder → batch dialog
         self.stack.addWidget(editor)
         if at is None:
             at = len(self._videos)
@@ -196,13 +198,16 @@ class ClipTab(QWidget):
         self._placeholder._browse_input_videos()
 
     def _browse_folder(self) -> None:
-        # Pick the source folder like picking files, then configure the batch
-        # (output + shared encoding) once; each video still opens as its own
-        # editor so crops/trims stay per video.
+        # Pick the source folder like picking files, then configure the batch.
         folder = QFileDialog.getExistingDirectory(self, "Choose a folder of videos")
-        if not folder:
-            return
-        dialog = BatchAddDialog(self._controller, Path(folder), self)
+        if folder:
+            self._open_folder_batch(Path(folder))
+
+    def _open_folder_batch(self, folder: Path) -> None:
+        # Configure the batch (output + shared encoding) once; each video still
+        # opens as its own editor so crops/trims stay per video. Shared by the
+        # "Add folder…" button and by dropping a folder on the canvas.
+        dialog = BatchAddDialog(self._controller, folder, self)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         self.open_videos(

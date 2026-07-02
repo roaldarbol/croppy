@@ -17,6 +17,7 @@ from croppy.gui.landing import (
     folder_videos,
     has_accepted_input,
     is_accepted_video,
+    single_dropped_folder,
 )
 
 
@@ -85,6 +86,18 @@ def test_accepted_videos_expands_a_dropped_folder(tmp_path: Path) -> None:
     _make(tmp_path / "sub", name="c")  # sub-folder video is not included
     urls = [QUrl.fromLocalFile(str(tmp_path))]
     assert [p.name for p in accepted_videos(urls)] == ["a.mp4", "b.mp4"]
+
+
+def test_single_dropped_folder(tmp_path: Path) -> None:
+    folder = tmp_path / "clips"
+    folder.mkdir()
+    video = _make(tmp_path, name="a")
+    # Exactly one folder → that folder; anything else → None (plain quick-add).
+    assert single_dropped_folder([QUrl.fromLocalFile(str(folder))]) == folder
+    assert single_dropped_folder([QUrl.fromLocalFile(str(video))]) is None
+    two = [QUrl.fromLocalFile(str(folder)), QUrl.fromLocalFile(str(video))]
+    assert single_dropped_folder(two) is None
+    assert single_dropped_folder([QUrl("https://example.com/x")]) is None
 
 
 def test_has_accepted_input_true_for_folder_without_walking(tmp_path: Path) -> None:

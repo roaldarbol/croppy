@@ -35,7 +35,12 @@ from croppy.ffmpeg.preview import probe_with_first_frame
 from croppy.ffmpeg.probe import VideoInfo
 from croppy.gui.constants import PANEL_HEADER_HEIGHT, PANEL_MARGIN
 from croppy.gui.drop_hint import DropHint
-from croppy.gui.landing import expand_video_inputs, file_dialog_filter, is_accepted_video
+from croppy.gui.landing import (
+    expand_video_inputs,
+    file_dialog_filter,
+    is_accepted_video,
+    single_dropped_folder,
+)
 from croppy.gui.media_loader import MediaLoader
 from croppy.gui.theme import (
     border_color,
@@ -144,6 +149,7 @@ class _DropListWidget(QListWidget):
     """
 
     files_dropped = Signal(list)  # list[Path]
+    folder_dropped = Signal(Path)  # a single folder dropped (opens the batch dialog)
     browse_requested = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -195,8 +201,12 @@ class _DropListWidget(QListWidget):
 
     def dropEvent(self, event) -> None:
         if event.mimeData().hasUrls():
-            paths = [Path(u.toLocalFile()) for u in event.mimeData().urls() if u.isLocalFile()]
-            self.files_dropped.emit(paths)
+            urls = event.mimeData().urls()
+            folder = single_dropped_folder(urls)
+            if folder is not None:
+                self.folder_dropped.emit(folder)
+            else:
+                self.files_dropped.emit([Path(u.toLocalFile()) for u in urls if u.isLocalFile()])
             event.acceptProposedAction()
         else:
             super().dropEvent(event)  # internal reorder
@@ -220,6 +230,7 @@ class VideoList(QWidget):
     selection_changed = Signal()
     items_added = Signal(list)  # list[int] of new row indices
     row_loaded = Signal(int)  # a row's probe + thumbnail finished
+    folder_dropped = Signal(Path)  # a single folder dropped; the tab decides what to do
 
     def __init__(self, with_duplicate: bool = False, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -239,6 +250,7 @@ class VideoList(QWidget):
         self._list.itemSelectionChanged.connect(self._on_selection_changed)
         self._list.model().rowsMoved.connect(self.changed)
         self._list.files_dropped.connect(self.add_paths)
+        self._list.folder_dropped.connect(self.folder_dropped)  # forwarded; a tab wires it
         self._list.browse_requested.connect(self.open_dialog)
         layout.addWidget(self._list)
 

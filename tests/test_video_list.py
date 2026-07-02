@@ -107,6 +107,30 @@ def test_dropped_files_are_added(qtbot, qapp, test_video: Path, tmp_path: Path) 
     assert vl.paths() == paths
 
 
+def test_dropped_folder_forwards_folder_dropped(qtbot, qapp, tmp_path: Path) -> None:
+    from PySide6.QtCore import QMimeData, Qt, QUrl
+    from PySide6.QtGui import QDropEvent
+
+    vl = VideoList()
+    qtbot.addWidget(vl)
+    folder = tmp_path / "clips"
+    folder.mkdir()
+    mime = QMimeData()
+    mime.setUrls([QUrl.fromLocalFile(str(folder))])
+    event = QDropEvent(
+        vl._list.rect().center(),
+        Qt.DropAction.CopyAction,
+        mime,
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+    )
+    # A dropped folder is forwarded for the tab to handle (batch dialog), not added.
+    with qtbot.waitSignal(vl.folder_dropped, timeout=500) as blocker:
+        vl._list.dropEvent(event)
+    assert blocker.args == [folder]
+    assert vl.paths() == []
+
+
 def test_remove_button_disabled_until_selection(
     qtbot, qapp, test_video: Path, tmp_path: Path
 ) -> None:

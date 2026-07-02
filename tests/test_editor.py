@@ -154,3 +154,14 @@ def test_canvas_drop_emits_all_videos(qtbot, qapp, test_video: Path, tmp_path: P
     with qtbot.waitSignal(canvas.videos_dropped, timeout=500) as blocker:
         _dispatch_drop(canvas, [a, b])
     assert blocker.args == [[a, b]]
+
+
+def test_canvas_drop_of_a_folder_emits_folder_dropped(qtbot, qapp, tmp_path: Path) -> None:
+    folder = tmp_path / "clips"
+    folder.mkdir()
+    canvas = VideoCanvas()
+    qtbot.addWidget(canvas)
+    # A single dropped folder routes to the batch dialog, not a plain add.
+    with qtbot.waitSignal(canvas.folder_dropped, timeout=500) as blocker:
+        _dispatch_drop(canvas, [folder])
+    assert blocker.args == [folder]
