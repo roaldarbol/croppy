@@ -32,9 +32,9 @@ def main(
         typer.Argument(
             exists=True,
             file_okay=True,
-            dir_okay=False,
+            dir_okay=True,
             readable=True,
-            help="Optional video file to open on launch.",
+            help="Optional video file, or a folder of videos, to open on launch.",
         ),
     ] = None,
     verbose: Annotated[

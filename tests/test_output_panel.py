@@ -87,7 +87,7 @@ def test_main_window_writes_to_chosen_output_dir(
     # crop tab's (pristine) compression panel follows the default.
     window._controller.set_default(EncodeSettings(encoder="libx264", preset="ultrafast"))
     with qtbot.waitSignal(window.clip_tab.video_ready, timeout=5000):
-        window.open_video(local)
+        window.open_path(local)
     editor = window.clip_tab.current_editor()
     assert editor is not None
 
@@ -99,7 +99,7 @@ def test_main_window_writes_to_chosen_output_dir(
     with qtbot.waitSignal(window._queue.job_finished, timeout=30000):
         window._queue.start_all()
 
-    # A single output keeps the source name verbatim, in the chosen folder.
-    assert (out_dir / "clip.mp4").is_file()
+    # A single crop is marked with an (unnumbered) _crop suffix, in the chosen folder.
+    assert (out_dir / "clip_crop.mp4").is_file()
     # Nothing was written next to the source: the src folder still holds only it.
     assert [p.name for p in src_dir.iterdir()] == ["clip.mp4"]

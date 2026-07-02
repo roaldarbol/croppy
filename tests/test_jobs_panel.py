@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from croppy.gui.jobs_panel import JobsPanel
+from croppy.gui.jobs_panel import JobsPanel, _job_detail_lines
 from croppy.gui.status_strip import StatusStrip
 from croppy.jobs.job import ClipJob, CompressJob, JobState
 from croppy.jobs.queue import JobQueue
@@ -182,6 +182,98 @@ def test_clear_finished(qtbot, qapp, tmp_path: Path) -> None:
     job.state = JobState.DONE
     panel.clear_finished()
     assert panel.rows() == []
+
+
+def test_queued_rows_are_numbered(qtbot, qapp, tmp_path: Path) -> None:
+    queue = JobQueue()
+    panel = JobsPanel(queue)
+    qtbot.addWidget(panel)
+    queue.submit(_crop(tmp_path / "a.mp4"))
+    queue.submit(_crop(tmp_path / "b.mp4"))
+    assert [row.num_label.text() for row in panel.rows()] == ["1", "2"]
+
+
+def test_reorder_updates_queue_and_numbers(qtbot, qapp, tmp_path: Path) -> None:
+    queue = JobQueue()
+    panel = JobsPanel(queue)
+    qtbot.addWidget(panel)
+    j1 = _crop(tmp_path / "a.mp4")
+    j2 = _crop(tmp_path / "b.mp4")
+    queue.submit(j1)
+    queue.submit(j2)
+    # Simulate a drag-drop that put j2 above j1 (the group emits the new order).
+    panel._groups["Queued"].reordered.emit([j2.id, j1.id])
+    assert [job.id for job in queue.jobs()] == [j2.id, j1.id]
+    # The # column follows the new order.
+    numbers = {row.job().id: row.num_label.text() for row in panel.rows()}
+    assert numbers == {j2.id: "1", j1.id: "2"}
+
+
+def test_started_row_loses_its_number(qtbot, qapp, tmp_path: Path) -> None:
+    queue = JobQueue()
+    panel = JobsPanel(queue)
+    qtbot.addWidget(panel)
+    job = _crop(tmp_path / "a.mp4")
+    queue.submit(job)
+    assert panel.rows()[0].num_label.text() == "1"
+    queue.job_started.emit(job.id)  # running jobs aren't part of the queue order
+    assert panel.rows()[0].num_label.text() == ""
+
+
+def test_only_queued_rows_are_draggable(qtbot, qapp, tmp_path: Path) -> None:
+    queue = JobQueue()
+    panel = JobsPanel(queue)
+    qtbot.addWidget(panel)
+    job = _crop(tmp_path / "a.mp4")
+    queue.submit(job)
+    row = panel.rows()[0]
+    assert row._header._draggable  # queued → draggable
+    queue.job_started.emit(job.id)
+    assert not row._header._draggable  # running → not draggable
+    queue.job_finished.emit(job.id)
+    assert not row._header._draggable  # finished → not draggable
+
+
+def test_clicking_arrow_expands_detail(qtbot, qapp, tmp_path: Path) -> None:
+    queue = JobQueue()
+    panel = JobsPanel(queue)
+    qtbot.addWidget(panel)
+    queue.submit(_crop(tmp_path / "a.mp4"))
+    row = panel.rows()[0]
+    assert not row._detail.isVisibleTo(row)
+    row.arrow_btn.click()
+    assert row._detail.isVisibleTo(row)
+    row.arrow_btn.click()
+    assert not row._detail.isVisibleTo(row)
+
+
+def test_detail_lines_for_a_clip_with_crop_and_trim(tmp_path: Path) -> None:
+    job = ClipJob(
+        input_path=Path("/movies/in.mp4"),
+        output_path=tmp_path / "out.mp4",
+        region=CropRegion(10, 20, 64, 48),
+        settings=EncodeSettings(),
+        trim=(1.5, 3.0),
+        duration_seconds=3.0,
+    )
+    detail = dict(_job_detail_lines(job))
+    assert detail["Output"] == str(tmp_path / "out.mp4")
+    assert detail["Source"] == str(Path("/movies/in.mp4"))
+    assert "Encoding" in detail
+    assert detail["Crop"] == "64×48 at (10, 20)"
+    assert detail["Trim"] == "1.50s for 3.00s"
+    assert "Error" not in detail
+
+
+def test_detail_lines_include_error_after_failure(qtbot, qapp, tmp_path: Path) -> None:
+    queue = JobQueue()
+    panel = JobsPanel(queue)
+    qtbot.addWidget(panel)
+    job = _crop(tmp_path / "a.mp4")
+    queue.submit(job)
+    queue.job_failed.emit(job.id, "ffmpeg blew up")
+    row = panel.rows()[0]
+    assert dict(_job_detail_lines(row.job()))["Error"] == "ffmpeg blew up"
 
 
 def test_status_strip_counts(qtbot, qapp, tmp_path: Path) -> None:

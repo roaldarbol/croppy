@@ -13,6 +13,7 @@ from croppy.gui.combine_tab import CombineTab
 from croppy.gui.compress_tab import CompressTab
 from croppy.gui.compression_panel import CompressionController
 from croppy.gui.jobs_panel import JobsPanel
+from croppy.gui.landing import folder_videos
 from croppy.gui.settings_tab import SettingsTab
 from croppy.gui.status_strip import StatusStrip
 from croppy.gui.theme import apply_app_theme, watch_app_palette
@@ -22,7 +23,7 @@ from croppy.jobs.queue import JobQueue, suggested_worker_count
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("croppy")
+        self.setWindowTitle("Croppy")
         self.resize(1340, 820)
 
         # App-wide border styling (GitHub-like), refreshed on a live theme switch.
@@ -59,10 +60,16 @@ class MainWindow(QMainWindow):
 
     # --- public API ---------------------------------------------------------
 
-    def open_video(self, path: Path) -> None:
-        """Open ``path`` in the Clip tab (used by the CLI ``croppy <video>``)."""
+    def open_path(self, path: Path) -> None:
+        """Open a video — or every video in a folder — in the Clip tab.
+
+        Used by the CLI ``croppy <video-or-folder>``.
+        """
         self.tabs.setCurrentWidget(self.clip_tab)
-        self.clip_tab.open_video(path)
+        if path.is_dir():
+            self.clip_tab.open_videos(folder_videos(path))
+        else:
+            self.clip_tab.open_video(path)
 
     def shutdown(self) -> None:
         """Cancel running jobs before the app exits (window close / Ctrl+C)."""

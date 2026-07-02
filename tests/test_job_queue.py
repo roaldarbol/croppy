@@ -25,6 +25,30 @@ def _make_job(input_path: Path, output_path: Path, duration: float = 2.0) -> Cli
     )
 
 
+def test_reorder_queued_changes_release_order(qtbot, qapp, tmp_path: Path) -> None:
+    queue = JobQueue()
+    jobs = [_make_job(Path("/dev/null"), tmp_path / f"{i}.mp4") for i in range(3)]
+    for job in jobs:
+        queue.submit(job)
+    ids = [job.id for job in jobs]
+
+    queue.reorder_queued([ids[2], ids[0], ids[1]])
+    assert [job.id for job in queue.jobs()] == [ids[2], ids[0], ids[1]]
+
+
+def test_reorder_queued_leaves_non_queued_jobs_in_place(qtbot, qapp, tmp_path: Path) -> None:
+    queue = JobQueue()
+    jobs = [_make_job(Path("/dev/null"), tmp_path / f"{i}.mp4") for i in range(3)]
+    for job in jobs:
+        queue.submit(job)
+    ids = [job.id for job in jobs]
+    jobs[1].state = JobState.DONE  # middle job is no longer staged
+
+    # Only the two queued jobs (slots 0 and 2) are reordered; the done one stays.
+    queue.reorder_queued([ids[2], ids[0]])
+    assert [job.id for job in queue.jobs()] == [ids[2], ids[1], ids[0]]
+
+
 def test_queue_submits_and_runs_one_job(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
     out = tmp_path / "out.mp4"
     job = _make_job(test_video, out)

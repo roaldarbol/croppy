@@ -181,6 +181,9 @@ class CombineTab(QWidget):
     def _add_group(self, select: bool = False) -> None:
         vlist = VideoList()
         vlist.changed.connect(self._on_videos_changed)
+        # Combine has no per-video settings dialog, so a dropped folder just adds
+        # the videos it holds to the group.
+        vlist.folder_dropped.connect(lambda folder, vl=vlist: vl.add_paths([folder]))
         self.stack.addWidget(vlist)
         name = f"Group {len(self._groups) + 1}"
         self._groups.append(
@@ -288,7 +291,7 @@ class CombineTab(QWidget):
         if len(paths) < 2:
             return
         if group.output_dir is None:
-            QMessageBox.warning(self, "croppy", "Choose an output folder for this group first.")
+            QMessageBox.warning(self, "Croppy", "Choose an output folder for this group first.")
             return
 
         taken = {job.output_path for job in self._queue.jobs()}

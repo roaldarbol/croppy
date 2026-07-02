@@ -42,6 +42,68 @@ def is_accepted_video(path: Path) -> bool:
     return path.suffix.lower() in VIDEO_EXTENSIONS and path.is_file()
 
 
+def folder_videos(folder: Path) -> list[Path]:
+    """The recognized videos directly inside ``folder``, sorted by name.
+
+    Not recursive — sub-folders are ignored. Missing/unreadable folders yield
+    nothing.
+    """
+    try:
+        return sorted(
+            (p for p in folder.iterdir() if is_accepted_video(p)), key=lambda p: p.name.lower()
+        )
+    except OSError as exc:
+        logger.warning("Could not scan folder {}: {}", folder, exc)
+        return []
+
+
+def expand_video_inputs(paths: Iterable[Path]) -> list[Path]:
+    """Expand any directories in ``paths`` into the videos directly inside them.
+
+    A recognized video file passes through unchanged; a directory contributes the
+    videos it holds (not recursive). Input order is preserved and duplicates are
+    dropped, so dropping a folder and one of its files won't queue it twice.
+    """
+    out: list[Path] = []
+    seen: set[Path] = set()
+    for path in paths:
+        if path.is_dir():
+            candidates = folder_videos(path)
+        elif is_accepted_video(path):
+            candidates = [path]
+        else:
+            candidates = []
+        for candidate in candidates:
+            if candidate not in seen:
+                seen.add(candidate)
+                out.append(candidate)
+    return out
+
+
+def single_dropped_folder(urls: Iterable) -> Path | None:
+    """The lone directory in a drop, or ``None`` if it isn't exactly one folder.
+
+    A single dropped folder opens the batch dialog; anything else (files, or a
+    mix) is a plain quick-add.
+    """
+    local = [Path(url.toLocalFile()) for url in urls if url.isLocalFile()]
+    if len(local) == 1 and local[0].is_dir():
+        return local[0]
+    return None
+
+
+def has_accepted_input(urls: Iterable) -> bool:
+    """Whether any URL is a local video file *or* a directory (a cheap check for
+    drag-accept: it never walks a folder, unlike :func:`accepted_videos`)."""
+    for url in urls:
+        if not url.isLocalFile():
+            continue
+        path = Path(url.toLocalFile())
+        if path.is_dir() or is_accepted_video(path):
+            return True
+    return False
+
+
 def file_dialog_filter() -> str:
     """Filter string for QFileDialog covering all recognized video extensions."""
     pats = " ".join(f"*{ext}" for ext in VIDEO_EXTENSIONS)
@@ -172,15 +234,14 @@ class LandingWidget(QWidget):
 
 
 def accepted_videos(urls: Iterable) -> list[Path]:
-    """Return every URL that is a local existing video file, in order."""
-    paths: list[Path] = []
-    for url in urls:
-        if not url.isLocalFile():
-            continue
-        path = Path(url.toLocalFile())
-        if is_accepted_video(path):
-            paths.append(path)
-    return paths
+    """Return the local videos named by ``urls``, expanding dropped folders.
+
+    A dropped directory contributes the videos directly inside it (not
+    recursive); plain video files pass through. Order is preserved and duplicates
+    are dropped.
+    """
+    local = [Path(url.toLocalFile()) for url in urls if url.isLocalFile()]
+    return expand_video_inputs(local)
 
 
 def first_accepted(urls: Iterable) -> Path | None:

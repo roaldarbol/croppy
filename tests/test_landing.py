@@ -10,14 +10,20 @@ from PySide6.QtCore import QUrl
 from croppy.gui.landing import (
     VIDEO_EXTENSIONS,
     LandingWidget,
+    accepted_videos,
+    expand_video_inputs,
     file_dialog_filter,
     first_accepted,
+    folder_videos,
+    has_accepted_input,
     is_accepted_video,
+    single_dropped_folder,
 )
 
 
-def _make(path: Path, ext: str) -> Path:
-    p = path / f"clip{ext}"
+def _make(path: Path, ext: str = ".mp4", name: str = "clip") -> Path:
+    p = path / f"{name}{ext}"
+    p.parent.mkdir(parents=True, exist_ok=True)
     p.write_bytes(b"\x00\x00\x00\x18ftyp")  # close enough; we only check the suffix
     return p
 
@@ -54,6 +60,54 @@ def test_first_accepted_returns_none_when_no_video(tmp_path: Path) -> None:
 
 def test_first_accepted_ignores_non_local_urls() -> None:
     assert first_accepted([QUrl("https://example.com/foo.mp4")]) is None
+
+
+def test_folder_videos_sorts_and_skips_subdirs(tmp_path: Path) -> None:
+    _make(tmp_path, name="b")
+    _make(tmp_path, name="a")
+    _make(tmp_path / "sub", name="c")  # in a sub-folder → ignored (not recursive)
+    (tmp_path / "notes.txt").write_text("nope")
+    found = folder_videos(tmp_path)
+    assert [p.name for p in found] == ["a.mp4", "b.mp4"]
+
+
+def test_expand_video_inputs_expands_folders_and_dedupes(tmp_path: Path) -> None:
+    a = _make(tmp_path, name="a")
+    _make(tmp_path, name="b")
+    _make(tmp_path / "sub", name="c")  # sub-folder video is not included
+    # The folder and one of its files: the file must not be queued twice.
+    result = expand_video_inputs([tmp_path, a])
+    assert [p.name for p in result] == ["a.mp4", "b.mp4"]
+
+
+def test_accepted_videos_expands_a_dropped_folder(tmp_path: Path) -> None:
+    _make(tmp_path, name="a")
+    _make(tmp_path, name="b")
+    _make(tmp_path / "sub", name="c")  # sub-folder video is not included
+    urls = [QUrl.fromLocalFile(str(tmp_path))]
+    assert [p.name for p in accepted_videos(urls)] == ["a.mp4", "b.mp4"]
+
+
+def test_single_dropped_folder(tmp_path: Path) -> None:
+    folder = tmp_path / "clips"
+    folder.mkdir()
+    video = _make(tmp_path, name="a")
+    # Exactly one folder → that folder; anything else → None (plain quick-add).
+    assert single_dropped_folder([QUrl.fromLocalFile(str(folder))]) == folder
+    assert single_dropped_folder([QUrl.fromLocalFile(str(video))]) is None
+    two = [QUrl.fromLocalFile(str(folder)), QUrl.fromLocalFile(str(video))]
+    assert single_dropped_folder(two) is None
+    assert single_dropped_folder([QUrl("https://example.com/x")]) is None
+
+
+def test_has_accepted_input_true_for_folder_without_walking(tmp_path: Path) -> None:
+    # An empty directory still counts as acceptable input (cheap drag-accept check).
+    assert has_accepted_input([QUrl.fromLocalFile(str(tmp_path))])
+    video = _make(tmp_path, ".mp4")
+    assert has_accepted_input([QUrl.fromLocalFile(str(video))])
+    text = tmp_path / "a.txt"
+    text.write_text("nope")
+    assert not has_accepted_input([QUrl.fromLocalFile(str(text))])
 
 
 def test_file_dialog_filter_includes_all_extensions() -> None:

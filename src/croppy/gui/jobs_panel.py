@@ -6,24 +6,33 @@ all / start selected, cancel, remove, and clear-finished.
 
 Rows are grouped by lifecycle state — Running, Pending, Queued, Finished — so
 that a job released but waiting for a free worker slot (Pending) is visually
-distinct from one that was never started (Queued).
+distinct from one that was never started (Queued). Each row lays its fields out
+in aligned columns (# · type · name · progress · status), a left arrow expands a
+detail panel, and staged (Queued) rows can be dragged up/down to reorder the
+queue.
 """
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QMimeData, Qt, Signal
+from PySide6.QtGui import QDrag
 from PySide6.QtWidgets import (
+    QApplication,
     QCheckBox,
+    QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QProgressBar,
     QPushButton,
     QScrollArea,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
-from croppy.jobs.job import Job, JobState
+from croppy.gui.compression_panel import summarize_settings
+from croppy.jobs.job import ClipJob, CombineJob, CompressJob, Job, JobState
 from croppy.jobs.queue import JobQueue, suggested_worker_count
 
 _FINISHED_STATES = frozenset({JobState.DONE, JobState.FAILED, JobState.CANCELED})
@@ -41,25 +50,142 @@ _GROUP_QUEUED = "Queued"
 _GROUP_FINISHED = "Finished"
 _GROUP_ORDER = (_GROUP_QUEUED, _GROUP_PENDING, _GROUP_RUNNING, _GROUP_FINISHED)
 
+# A dragged row carries its job id in this custom mime type.
+_JOB_MIME = "application/x-croppy-job-id"
+
+# Fixed column widths so every row (and the header) line up. Name is the one
+# stretch column; progress and the rest are fixed.
+_W_ARROW = 20
+_W_CHECK = 22
+_W_NUM = 28
+_W_TYPE = 84
+_W_PROGRESS = 150
+_W_STATUS = 84
+_W_CANCEL = 74
+
+# Shared row geometry so the header, rows, and detail panel all line up.
+_ROW_HMARGIN = 4
+_ROW_SPACING = 8
+# X where the Type column starts (arrow + check + # columns, with the gaps).
+_TYPE_X = _ROW_HMARGIN + _W_ARROW + _ROW_SPACING + _W_CHECK + _ROW_SPACING + _W_NUM + _ROW_SPACING
+
+
+def _job_detail_lines(job: Job) -> list[tuple[str, str]]:
+    """Label/value pairs shown in a row's expandable detail panel."""
+    lines: list[tuple[str, str]] = [("Output", str(job.output_path))]
+    if isinstance(job, ClipJob):
+        lines.append(("Source", str(job.input_path)))
+        lines.append(("Encoding", summarize_settings(job.settings)))
+        if job.region is not None:
+            r = job.region.snapped
+            lines.append(("Crop", f"{r.w}×{r.h} at ({r.x}, {r.y})"))
+        if job.trim is not None:
+            start, duration = job.trim
+            lines.append(("Trim", f"{start:.2f}s for {duration:.2f}s"))
+    elif isinstance(job, CompressJob):
+        lines.append(("Source", str(job.input_path)))
+        lines.append(("Encoding", summarize_settings(job.settings)))
+    elif isinstance(job, CombineJob):
+        lines.append(("Sources", "\n".join(str(p) for p in job.inputs)))
+        lines.append(("Encoding", summarize_settings(job.settings)))
+    if job.error:
+        lines.append(("Error", job.error))
+    return lines
+
+
+class _RowHeader(QWidget):
+    """The columns row of a :class:`JobRow`.
+
+    Handles the mouse itself so a plain click toggles the detail panel while a
+    press-and-drag (only when :meth:`set_draggable` is on) starts a reorder drag
+    carrying the job id. Interactive children (checkbox, arrow, Cancel) get their
+    own clicks first, so those still work normally.
+    """
+
+    clicked = Signal()
+
+    def __init__(self, job_id: int, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._job_id = job_id
+        self._press_pos = None
+        self._draggable = False
+
+    def set_draggable(self, value: bool) -> None:
+        self._draggable = value
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._press_pos = event.position().toPoint()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:
+        if (
+            self._press_pos is not None
+            and self._draggable
+            and event.buttons() & Qt.MouseButton.LeftButton
+            and (event.position().toPoint() - self._press_pos).manhattanLength()
+            >= QApplication.startDragDistance()
+        ):
+            hotspot = self._press_pos
+            self._press_pos = None
+            drag = QDrag(self)
+            mime = QMimeData()
+            mime.setData(_JOB_MIME, str(self._job_id).encode())
+            drag.setMimeData(mime)
+            # A ghost of the row follows the cursor so the drag is clearly visible.
+            pixmap = self.grab()
+            drag.setPixmap(pixmap)
+            drag.setHotSpot(hotspot)
+            drag.exec(Qt.DropAction.MoveAction)
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:
+        if self._press_pos is not None and event.button() == Qt.MouseButton.LeftButton:
+            self._press_pos = None
+            self.clicked.emit()
+        super().mouseReleaseEvent(event)
+
 
 class JobRow(QWidget):
-    """A single selectable job row: checkbox, kind tag, name, progress, status, cancel."""
+    """A single job: a columns header (# · type · name · progress · status ·
+    Cancel) with a left arrow that expands a detail panel underneath."""
 
     cancel_clicked = Signal(int)  # job_id
 
     def __init__(self, job: Job, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._job = job
+        self._expanded = False
 
-        h = QHBoxLayout(self)
-        h.setContentsMargins(4, 2, 4, 2)
-        h.setSpacing(8)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        self._header = _RowHeader(job.id)
+        self._header.clicked.connect(self.toggle_detail)
+        h = QHBoxLayout(self._header)
+        h.setContentsMargins(_ROW_HMARGIN, 2, _ROW_HMARGIN, 2)
+        h.setSpacing(_ROW_SPACING)
+
+        self.arrow_btn = QToolButton()
+        self.arrow_btn.setAutoRaise(True)
+        self.arrow_btn.setArrowType(Qt.ArrowType.RightArrow)
+        self.arrow_btn.setFixedWidth(_W_ARROW)
+        self.arrow_btn.setToolTip("Show job details")
+        self.arrow_btn.clicked.connect(self.toggle_detail)
 
         self.select_check = QCheckBox()
+        self.select_check.setFixedWidth(_W_CHECK)
         self.select_check.setToolTip("Select for 'Start selected' / 'Remove selected'")
 
+        self.num_label = QLabel("")
+        self.num_label.setFixedWidth(_W_NUM)
+        self.num_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.num_label.setStyleSheet("color: #888;")
+        self.num_label.setToolTip("Position in the queue (drag to reorder)")
+
         self.kind_tag = QLabel(job.kind)
-        self.kind_tag.setFixedWidth(72)
+        self.kind_tag.setFixedWidth(_W_TYPE)
         self.kind_tag.setAlignment(Qt.AlignmentFlag.AlignCenter)
         color = _KIND_COLORS.get(job.kind, "#888")
         self.kind_tag.setStyleSheet(
@@ -67,35 +193,82 @@ class JobRow(QWidget):
         )
 
         self.label = QLabel(job.label)
-        self.label.setMinimumWidth(200)
+        self.label.setMinimumWidth(160)
         self.label.setToolTip(str(job.output_path))
-        self.label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
 
         self.bar = QProgressBar()
+        self.bar.setFixedWidth(_W_PROGRESS)
         self.bar.setRange(0, 1000)
         self.bar.setValue(0)
         self.bar.setFormat("%p%")
 
         self.status = QLabel()
-        self.status.setMinimumWidth(72)
+        self.status.setFixedWidth(_W_STATUS)
         self.set_queued()
 
         self.cancel_btn = QPushButton("Cancel")
-        self.cancel_btn.setFixedWidth(72)
+        self.cancel_btn.setFixedWidth(_W_CANCEL)
         self.cancel_btn.clicked.connect(self._on_cancel)
 
+        h.addWidget(self.arrow_btn)
         h.addWidget(self.select_check)
+        h.addWidget(self.num_label)
         h.addWidget(self.kind_tag)
-        h.addWidget(self.label)
-        h.addWidget(self.bar, 1)
+        h.addWidget(self.label, 1)
+        h.addWidget(self.bar)
         h.addWidget(self.status)
         h.addWidget(self.cancel_btn)
+        outer.addWidget(self._header)
+
+        self._detail = self._build_detail()
+        self._detail.setVisible(False)
+        outer.addWidget(self._detail)
+
+    # --- detail panel -------------------------------------------------------
+
+    def _build_detail(self) -> QWidget:
+        panel = QWidget()
+        panel.setStyleSheet("QLabel { color: #aaa; }")
+        grid = QGridLayout(panel)
+        # Keys line up under the Type column; values under the Name column.
+        grid.setContentsMargins(_TYPE_X, 0, _ROW_HMARGIN, 6)
+        grid.setHorizontalSpacing(_ROW_SPACING)
+        grid.setVerticalSpacing(2)
+        grid.setColumnMinimumWidth(0, _W_TYPE)
+        grid.setColumnStretch(1, 1)
+        for r, (key, value) in enumerate(_job_detail_lines(self._job)):
+            k = QLabel(f"{key}:")
+            k.setStyleSheet("color: #888; font-weight: bold;")
+            k.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
+            v = QLabel(value)
+            v.setWordWrap(True)
+            v.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            grid.addWidget(k, r, 0)
+            grid.addWidget(v, r, 1)
+        return panel
+
+    def toggle_detail(self) -> None:
+        self.set_expanded(not self._expanded)
+
+    def set_expanded(self, expanded: bool) -> None:
+        self._expanded = expanded
+        self._detail.setVisible(expanded)
+        self.arrow_btn.setArrowType(Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow)
+
+    # --- public API ---------------------------------------------------------
 
     def job(self) -> Job:
         return self._job
 
     def is_checked(self) -> bool:
         return self.select_check.isChecked()
+
+    def set_draggable(self, value: bool) -> None:
+        self._header.set_draggable(value)
+
+    def set_index(self, position: int) -> None:
+        """Show a 1-based queue position, or clear it when ``position <= 0``."""
+        self.num_label.setText(str(position) if position > 0 else "")
 
     def set_progress(self, fraction: float) -> None:
         self.bar.setValue(round(fraction * 1000))
@@ -124,23 +297,122 @@ class JobRow(QWidget):
         self.status.setStyleSheet("color: #d04444;")
         self.status.setToolTip(message)
         self.cancel_btn.setEnabled(False)
+        self._refresh_detail()
 
     def set_canceled(self) -> None:
         self.status.setText("canceled")
         self.status.setStyleSheet("color: #a06800;")
         self.cancel_btn.setEnabled(False)
 
+    def _refresh_detail(self) -> None:
+        """Rebuild the detail (e.g. after a failure adds an error line)."""
+        was_expanded = self._expanded
+        old = self._detail
+        self._detail = self._build_detail()
+        self._detail.setVisible(was_expanded)
+        self.layout().replaceWidget(old, self._detail)
+        old.setParent(None)
+        old.deleteLater()
+
     def _on_cancel(self) -> None:
         self.cancel_clicked.emit(self._job.id)
+
+
+class _ReorderBody(QWidget):
+    """The rows container of a group. When drops are enabled (the Queued group),
+    a dragged row can be dropped to a new position, emitting the new order."""
+
+    reordered = Signal(list)  # [job_id, …] top→bottom after a drop
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._layout = QVBoxLayout(self)
+        self._layout.setContentsMargins(0, 0, 0, 0)
+        self._layout.setSpacing(2)
+        # A thin line marking where a dragged row would drop; floats over the rows.
+        self._indicator = QFrame(self)
+        self._indicator.setFixedHeight(2)
+        self._indicator.setStyleSheet("background: #4a9eff;")
+        self._indicator.hide()
+
+    def add_row(self, row: JobRow) -> None:
+        self._layout.addWidget(row)
+        row.show()  # a reparented widget must be re-shown
+
+    def remove_row(self, row: JobRow) -> None:
+        self._layout.removeWidget(row)
+
+    def count(self) -> int:
+        return self._layout.count()
+
+    def rows(self) -> list[JobRow]:
+        return [self._layout.itemAt(i).widget() for i in range(self._layout.count())]
+
+    # --- drag-drop reorder --------------------------------------------------
+
+    def dragEnterEvent(self, event) -> None:
+        if event.mimeData().hasFormat(_JOB_MIME):
+            event.acceptProposedAction()
+
+    def dragMoveEvent(self, event) -> None:
+        if event.mimeData().hasFormat(_JOB_MIME):
+            self._show_indicator(event.position().toPoint().y())
+            event.acceptProposedAction()
+
+    def dragLeaveEvent(self, event) -> None:
+        self._indicator.hide()
+        super().dragLeaveEvent(event)
+
+    def _drop_index(self, y: float, exclude: JobRow | None) -> int:
+        """The insertion index a drop at height ``y`` maps to (past-the-row when
+        below its midpoint), counting only rows other than ``exclude``."""
+        index = 0
+        for row in self.rows():
+            if row is exclude:
+                continue
+            if y < row.y() + row.height() / 2:
+                break
+            index += 1
+        return index
+
+    def _show_indicator(self, y: float) -> None:
+        rows = self.rows()
+        if not rows:
+            self._indicator.hide()
+            return
+        index = self._drop_index(y, exclude=None)
+        line_y = rows[index].y() - 2 if index < len(rows) else rows[-1].geometry().bottom()
+        self._indicator.setGeometry(0, max(0, line_y), self.width(), 2)
+        self._indicator.raise_()
+        self._indicator.show()
+
+    def dropEvent(self, event) -> None:
+        self._indicator.hide()
+        if not event.mimeData().hasFormat(_JOB_MIME):
+            return
+        job_id = int(bytes(event.mimeData().data(_JOB_MIME)).decode())
+        row = next((r for r in self.rows() if r.job().id == job_id), None)
+        if row is None:
+            return
+        index = self._drop_index(event.position().toPoint().y(), exclude=row)
+        self._layout.removeWidget(row)
+        self._layout.insertWidget(index, row)
+        event.acceptProposedAction()
+        self.reordered.emit([r.job().id for r in self.rows()])
 
 
 class _JobGroup(QWidget):
     """A titled section holding the rows for one lifecycle state.
 
     Hidden entirely while empty; the header shows the title and a live count.
+    The Queued group is ``reorderable`` so its rows accept reorder drops.
     """
 
-    def __init__(self, title: str, parent: QWidget | None = None) -> None:
+    reordered = Signal(list)  # [job_id, …] after a drop (Queued group only)
+
+    def __init__(
+        self, title: str, reorderable: bool = False, parent: QWidget | None = None
+    ) -> None:
         super().__init__(parent)
         self._title = title
 
@@ -152,23 +424,24 @@ class _JobGroup(QWidget):
         self._header.setStyleSheet("color: #aaa; font-weight: bold; padding: 8px 2px 2px 2px;")
         v.addWidget(self._header)
 
-        self._body = QWidget()
-        self._body_layout = QVBoxLayout(self._body)
-        self._body_layout.setContentsMargins(0, 0, 0, 0)
-        self._body_layout.setSpacing(2)
+        self._body = _ReorderBody()
+        self._body.setAcceptDrops(reorderable)
+        self._body.reordered.connect(self.reordered)
         v.addWidget(self._body)
 
         self.setVisible(False)
 
     def add_row(self, row: JobRow) -> None:
-        self._body_layout.addWidget(row)
-        row.show()  # a reparented widget must be re-shown
+        self._body.add_row(row)
 
     def remove_row(self, row: JobRow) -> None:
-        self._body_layout.removeWidget(row)
+        self._body.remove_row(row)
 
     def count(self) -> int:
-        return self._body_layout.count()
+        return self._body.count()
+
+    def rows(self) -> list[JobRow]:
+        return self._body.rows()
 
     def refresh(self) -> None:
         n = self.count()
@@ -238,10 +511,13 @@ class JobsPanel(QWidget):
         self._inner_layout = QVBoxLayout(self._inner)
         self._inner_layout.setContentsMargins(0, 0, 0, 0)
         self._inner_layout.setSpacing(2)
+        self._inner_layout.addWidget(self._column_header())
 
         self._groups: dict[str, _JobGroup] = {}
         for title in _GROUP_ORDER:
-            group = _JobGroup(title)
+            group = _JobGroup(title, reorderable=(title == _GROUP_QUEUED))
+            if title == _GROUP_QUEUED:
+                group.reordered.connect(self._on_reordered)
             self._groups[title] = group
             self._inner_layout.addWidget(group)
         self._inner_layout.addStretch(1)
@@ -259,6 +535,42 @@ class JobsPanel(QWidget):
         queue.job_canceled.connect(self._on_canceled)
         queue.job_removed.connect(self._on_removed)
         self._update_buttons()
+
+    def _column_header(self) -> QWidget:
+        """A title row whose columns line up with the rows.
+
+        It mirrors the row layout exactly — fixed-width placeholder widgets for
+        the arrow/checkbox/cancel columns and the same margins/spacing — so each
+        title (and the right-aligned #) sits over its column's content.
+        """
+        head = QWidget()
+        h = QHBoxLayout(head)
+        h.setContentsMargins(_ROW_HMARGIN, 2, _ROW_HMARGIN, 2)
+        h.setSpacing(_ROW_SPACING)
+
+        def _spacer(width: int) -> QWidget:
+            w = QWidget()
+            w.setFixedWidth(width)
+            return w
+
+        def _title(text: str, width: int, align=Qt.AlignmentFlag.AlignLeft) -> QLabel:
+            lbl = QLabel(text)
+            lbl.setFixedWidth(width)
+            lbl.setAlignment(align | Qt.AlignmentFlag.AlignVCenter)
+            lbl.setStyleSheet("color: #888; font-weight: bold;")
+            return lbl
+
+        h.addWidget(_spacer(_W_ARROW))
+        h.addWidget(_spacer(_W_CHECK))
+        h.addWidget(_title("#", _W_NUM, Qt.AlignmentFlag.AlignRight))
+        h.addWidget(_title("Type", _W_TYPE, Qt.AlignmentFlag.AlignCenter))
+        name = QLabel("Name")
+        name.setStyleSheet("color: #888; font-weight: bold;")
+        h.addWidget(name, 1)
+        h.addWidget(_title("Progress", _W_PROGRESS))
+        h.addWidget(_title("Status", _W_STATUS))
+        h.addWidget(_spacer(_W_CANCEL))
+        return head
 
     # --- public API ---------------------------------------------------------
 
@@ -318,6 +630,7 @@ class JobsPanel(QWidget):
     def _on_failed(self, job_id: int, message: str) -> None:
         row = self._rows.get(job_id)
         if row is not None:
+            row.job().error = message  # so the detail's Error line is populated
             row.set_failed(message)
             self._place_row(job_id, _GROUP_FINISHED)
         self._update_buttons()
@@ -337,8 +650,19 @@ class JobsPanel(QWidget):
                 self._groups[group].remove_row(row)
             row.setParent(None)
             row.deleteLater()
+        self._renumber_queued()
         self._refresh_groups()
         self._update_buttons()
+
+    def _on_reordered(self, ordered_ids: list[int]) -> None:
+        """A drag-drop within the Queued group changed the release order."""
+        self._queue.reorder_queued(ordered_ids)
+        # Number from the authoritative new order (which a real drop has already
+        # applied to the layout), not the widget layout.
+        for position, job_id in enumerate(ordered_ids, start=1):
+            row = self._rows.get(job_id)
+            if row is not None:
+                row.set_index(position)
 
     # --- internals ----------------------------------------------------------
 
@@ -354,7 +678,16 @@ class JobsPanel(QWidget):
                 self._groups[current].remove_row(row)
             self._groups[target].add_row(row)
             self._row_group[job_id] = target
+        # Only staged (Queued) rows are draggable; others lose their number.
+        row.set_draggable(target == _GROUP_QUEUED)
+        if target != _GROUP_QUEUED:
+            row.set_index(0)
+        self._renumber_queued()
         self._refresh_groups()
+
+    def _renumber_queued(self) -> None:
+        for i, row in enumerate(self._groups[_GROUP_QUEUED].rows(), start=1):
+            row.set_index(i)
 
     def _refresh_groups(self) -> None:
         for group in self._groups.values():

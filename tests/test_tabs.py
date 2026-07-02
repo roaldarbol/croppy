@@ -276,6 +276,118 @@ def test_compress_output_folder_is_per_item(qtbot, qapp, test_video: Path, tmp_p
     assert jobs[1].output_path == dir_b / "clip1_compressed.mp4"
 
 
+def test_compress_folder_add_uses_plain_names(
+    qtbot, qapp, test_video: Path, tmp_path: Path
+) -> None:
+    queue = MagicMock()
+    queue.jobs.return_value = []
+    tab = CompressTab(CompressionController(), queue)
+    qtbot.addWidget(tab)
+    root = tmp_path / "clips"
+    root.mkdir()
+    shutil.copy(test_video, root / "a.mp4")
+    shutil.copy(test_video, root / "b.mp4")
+    tab.video_list.add_paths([root])  # a.mp4, b.mp4
+
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    tab.video_list._list.selectAll()
+    tab.output_picker.set_output_dir(out_dir)
+
+    tab.video_list._list.clearSelection()  # queue all
+    tab._queue_jobs()
+    names = sorted(c.args[0].output_path.name for c in queue.submit.call_args_list)
+    assert names == ["a_compressed.mp4", "b_compressed.mp4"]
+    for call in queue.submit.call_args_list:
+        assert call.args[0].output_path.parent == out_dir
+
+
+def test_compress_batch_dialog_seeds_output_and_settings(
+    qtbot, qapp, test_video: Path, tmp_path: Path
+) -> None:
+    from unittest.mock import patch
+
+    from croppy.models import EncodeSettings
+
+    queue = MagicMock()
+    queue.jobs.return_value = []
+    tab = CompressTab(CompressionController(), queue)
+    qtbot.addWidget(tab)
+    root = tmp_path / "clips"
+    root.mkdir()
+    shutil.copy(test_video, root / "a.mp4")
+    shutil.copy(test_video, root / "b.mp4")
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    settings = EncodeSettings(encoder="libx265", container="mkv")
+
+    dialog = MagicMock()
+    dialog.exec.return_value = 1  # Accepted
+    dialog.videos.return_value = [root / "a.mp4", root / "b.mp4"]
+    dialog.output_dir.return_value = out_dir
+    dialog.settings.return_value = settings
+    with (
+        patch("croppy.gui.compress_tab.QFileDialog.getExistingDirectory", return_value=str(root)),
+        patch("croppy.gui.compress_tab.BatchAddDialog", return_value=dialog),
+    ):
+        tab._add_batch()
+
+    # Every row was seeded with the batch's output folder + settings.
+    assert tab.video_list.count() == 2
+    for row in range(2):
+        cfg = tab._item_config(row)
+        assert cfg.output_dir == out_dir
+        assert cfg.settings == settings
+
+    tab._queue_jobs()
+    outs = sorted(c.args[0].output_path.name for c in queue.submit.call_args_list)
+    # Flattened into out_dir with the batch container applied.
+    assert outs == ["a_compressed.mkv", "b_compressed.mkv"]
+
+
+def test_compress_folder_drop_opens_batch(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
+    from unittest.mock import patch
+
+    from croppy.models import EncodeSettings
+
+    queue = MagicMock()
+    queue.jobs.return_value = []
+    tab = CompressTab(CompressionController(), queue)
+    qtbot.addWidget(tab)
+    folder = tmp_path / "clips"
+    folder.mkdir()
+    shutil.copy(test_video, folder / "a.mp4")
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    settings = EncodeSettings(container="mkv")
+
+    dialog = MagicMock()
+    dialog.exec.return_value = 1  # Accepted
+    dialog.videos.return_value = [folder / "a.mp4"]
+    dialog.output_dir.return_value = out_dir
+    dialog.settings.return_value = settings
+    with patch("croppy.gui.compress_tab.BatchAddDialog", return_value=dialog):
+        # A folder dropped on the list routes to the batch dialog (no file picker).
+        tab.video_list.folder_dropped.emit(folder)
+
+    assert tab.video_list.count() == 1
+    cfg = tab._item_config(0)
+    assert cfg.output_dir == out_dir
+    assert cfg.settings == settings
+
+
+def test_combine_folder_drop_adds_videos(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
+    tab = CombineTab(CompressionController(), MagicMock())
+    qtbot.addWidget(tab)
+    folder = tmp_path / "clips"
+    folder.mkdir()
+    shutil.copy(test_video, folder / "a.mp4")
+    shutil.copy(test_video, folder / "b.mp4")
+    # Combine has no batch dialog: a dropped folder just adds its videos.
+    tab.video_list.folder_dropped.emit(folder)
+    assert sorted(p.name for p in tab.video_list.paths()) == ["a.mp4", "b.mp4"]
+
+
 def test_compress_right_panel_inactive_without_selection(
     qtbot, qapp, test_video: Path, tmp_path: Path
 ) -> None:

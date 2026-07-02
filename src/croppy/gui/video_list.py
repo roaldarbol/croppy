@@ -35,7 +35,12 @@ from croppy.ffmpeg.preview import probe_with_first_frame
 from croppy.ffmpeg.probe import VideoInfo
 from croppy.gui.constants import PANEL_HEADER_HEIGHT, PANEL_MARGIN
 from croppy.gui.drop_hint import DropHint
-from croppy.gui.landing import file_dialog_filter, is_accepted_video
+from croppy.gui.landing import (
+    expand_video_inputs,
+    file_dialog_filter,
+    is_accepted_video,
+    single_dropped_folder,
+)
 from croppy.gui.media_loader import MediaLoader
 from croppy.gui.theme import (
     border_color,
@@ -144,6 +149,7 @@ class _DropListWidget(QListWidget):
     """
 
     files_dropped = Signal(list)  # list[Path]
+    folder_dropped = Signal(Path)  # a single folder dropped (opens the batch dialog)
     browse_requested = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -195,8 +201,12 @@ class _DropListWidget(QListWidget):
 
     def dropEvent(self, event) -> None:
         if event.mimeData().hasUrls():
-            paths = [Path(u.toLocalFile()) for u in event.mimeData().urls() if u.isLocalFile()]
-            self.files_dropped.emit(paths)
+            urls = event.mimeData().urls()
+            folder = single_dropped_folder(urls)
+            if folder is not None:
+                self.folder_dropped.emit(folder)
+            else:
+                self.files_dropped.emit([Path(u.toLocalFile()) for u in urls if u.isLocalFile()])
             event.acceptProposedAction()
         else:
             super().dropEvent(event)  # internal reorder
@@ -220,6 +230,7 @@ class VideoList(QWidget):
     selection_changed = Signal()
     items_added = Signal(list)  # list[int] of new row indices
     row_loaded = Signal(int)  # a row's probe + thumbnail finished
+    folder_dropped = Signal(Path)  # a single folder dropped; the tab decides what to do
 
     def __init__(self, with_duplicate: bool = False, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -239,11 +250,14 @@ class VideoList(QWidget):
         self._list.itemSelectionChanged.connect(self._on_selection_changed)
         self._list.model().rowsMoved.connect(self.changed)
         self._list.files_dropped.connect(self.add_paths)
+        self._list.folder_dropped.connect(self.folder_dropped)  # forwarded; a tab wires it
         self._list.browse_requested.connect(self.open_dialog)
         layout.addWidget(self._list)
 
         # Centered logo + prompt shown only when the list is empty (matches the Crop canvas).
-        self._prompt = DropHint("Drop videos here\nor click to browse", self._list.viewport())
+        self._prompt = DropHint(
+            "Drop videos or a folder here\nor click to browse", self._list.viewport()
+        )
         self._list.center_widget = self._prompt
 
         # Floating action buttons hovering over the list, bottom-centered.
@@ -255,10 +269,13 @@ class VideoList(QWidget):
         ob.setSpacing(6)
         self.add_btn = QPushButton("Add videos…")
         self.add_btn.clicked.connect(self.open_dialog)
+        self.add_folder_btn = QPushButton("Add folder…")
+        self.add_folder_btn.clicked.connect(self.open_folder_dialog)
         self.remove_btn = QPushButton("Remove selected")
         self.remove_btn.clicked.connect(self.remove_selected)
         self.remove_btn.setEnabled(False)
         ob.addWidget(self.add_btn)
+        ob.addWidget(self.add_folder_btn)
         ob.addWidget(self.remove_btn)
         self.duplicate_btn: QPushButton | None = None
         if with_duplicate:
@@ -298,8 +315,19 @@ class VideoList(QWidget):
             self._list.update(self._list.indexFromItem(item))
 
     def add_paths(self, paths: list[Path]) -> None:
+        """Add the given videos; any directory is expanded to the videos it holds.
+
+        A directory contributes the videos directly inside it (not recursive).
+        """
+        self.add_batch(expand_video_inputs(paths))
+
+    def add_batch(self, videos: list[Path]) -> list[int]:
+        """Add pre-resolved ``videos`` as rows and return their row indices.
+
+        Used by the batch-add dialog, which has already scanned the folder.
+        """
         new_rows: list[int] = []
-        for path in paths:
+        for path in videos:
             if not is_accepted_video(path):
                 continue
             item = self._make_item(path, "Loading…", QPixmap())
@@ -310,6 +338,7 @@ class VideoList(QWidget):
             self._update_empty()
             self.items_added.emit(new_rows)
             self.changed.emit()
+        return new_rows
 
     def clear(self) -> None:
         if self._list.count():
@@ -350,6 +379,14 @@ class VideoList(QWidget):
         paths = [Path(p) for p in path_strs]
         self._last_dir = str(paths[0].parent)
         self.add_paths(paths)
+
+    def open_folder_dialog(self) -> None:
+        folder = QFileDialog.getExistingDirectory(self, "Add a folder of videos", self._last_dir)
+        if not folder:
+            return
+        self._last_dir = folder
+        # add_paths expands the directory into the videos directly inside it.
+        self.add_paths([Path(folder)])
 
     # --- Qt overrides -------------------------------------------------------
 

@@ -25,7 +25,9 @@ def run(video: Path | None = None, log_level_override: str | None = None) -> int
     logger.info("croppy {} starting", __version__)
     qt_app = QApplication.instance() or QApplication(sys.argv)
     qt_app.setApplicationName("croppy")
-    qt_app.setApplicationDisplayName("croppy")
+    # Display name is the user-facing label (window title, menus); keep the
+    # application/organization names lowercase — they key the QSettings path.
+    qt_app.setApplicationDisplayName("Croppy")
     # organizationName completes the QSettings storage path (see croppy.config).
     qt_app.setOrganizationName("croppy")
     qt_app.setWindowIcon(app_icon())
@@ -37,8 +39,13 @@ def run(video: Path | None = None, log_level_override: str | None = None) -> int
 
     window = MainWindow()
     if video is not None:
-        window.open_video(video)
+        window.open_path(video)
     window.show()
+
+    # Check the release channel for a newer version (honours the Settings toggle).
+    from croppy.gui.update_check import maybe_check_for_updates
+
+    maybe_check_for_updates(window)
 
     # Cancel running ffmpeg jobs on exit so we don't orphan encodes.
     qt_app.aboutToQuit.connect(window.shutdown)

@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from croppy.config import (
+    load_check_updates,
     load_encode_settings,
     load_log_level,
     load_parallel_enabled,
+    save_check_updates,
     save_encode_settings,
     save_log_level,
     save_parallel_enabled,
@@ -56,6 +58,17 @@ def test_parallel_enabled_roundtrip() -> None:
     assert load_parallel_enabled() is True
     save_parallel_enabled(False)
     assert load_parallel_enabled() is False
+
+
+def test_check_updates_defaults_on() -> None:
+    assert load_check_updates() is True
+
+
+def test_check_updates_roundtrip() -> None:
+    save_check_updates(False)
+    assert load_check_updates() is False
+    save_check_updates(True)
+    assert load_check_updates() is True
 
 
 def test_log_level_defaults() -> None:

@@ -17,6 +17,17 @@ pixi global install croppy -c https://prefix.dev/sleeb-forge -c conda-forge
     Croppy is on its way to **conda-forge**. Once it lands you'll be able to
     `pixi add croppy` or `conda install -c conda-forge croppy`.
 
+## Updating
+
+Update Croppy to the latest release with:
+
+```bash
+pixi global update croppy
+```
+
+Croppy also checks for a newer version on startup and lets you know when one is
+available.
+
 ## Launching
 
 <p align="center" markdown>
