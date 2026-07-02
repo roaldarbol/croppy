@@ -239,7 +239,7 @@ class JobRow(QWidget):
         for r, (key, value) in enumerate(_job_detail_lines(self._job)):
             k = QLabel(f"{key}:")
             k.setStyleSheet("color: #888; font-weight: bold;")
-            k.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+            k.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
             v = QLabel(value)
             v.setWordWrap(True)
             v.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
