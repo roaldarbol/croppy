@@ -276,6 +276,33 @@ def test_compress_output_folder_is_per_item(qtbot, qapp, test_video: Path, tmp_p
     assert jobs[1].output_path == dir_b / "clip1_compressed.mp4"
 
 
+def test_compress_folder_flattens_with_subfolder_prefix(
+    qtbot, qapp, test_video: Path, tmp_path: Path
+) -> None:
+    queue = MagicMock()
+    queue.jobs.return_value = []
+    tab = CompressTab(CompressionController(), queue)
+    qtbot.addWidget(tab)
+    root = tmp_path / "clips"
+    (root / "sub").mkdir(parents=True)
+    shutil.copy(test_video, root / "a.mp4")
+    shutil.copy(test_video, root / "sub" / "b.mp4")
+    tab.video_list.add_paths([root])  # a.mp4, sub/b.mp4
+
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    tab.video_list._list.selectAll()
+    tab.output_picker.set_output_dir(out_dir)
+
+    tab.video_list._list.clearSelection()  # queue all
+    tab._queue_jobs()
+    names = sorted(c.args[0].output_path.name for c in queue.submit.call_args_list)
+    # Both flatten into out_dir; the nested one bakes its sub-folder into the name.
+    assert names == ["a_compressed.mp4", "sub_b_compressed.mp4"]
+    for call in queue.submit.call_args_list:
+        assert call.args[0].output_path.parent == out_dir
+
+
 def test_compress_right_panel_inactive_without_selection(
     qtbot, qapp, test_video: Path, tmp_path: Path
 ) -> None:

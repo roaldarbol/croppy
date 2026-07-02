@@ -31,6 +31,7 @@ from croppy.gui.compression_panel import (
     summarize_settings,
 )
 from croppy.gui.constants import PANEL_HEADER_HEIGHT, PANEL_MARGIN, SIDEBAR_DESCRIPTION_HEIGHT
+from croppy.gui.landing import subfolder_prefix
 from croppy.gui.output_picker import OutputFolderPicker
 from croppy.gui.status_flash import StatusFlash, queued_message
 from croppy.gui.video_list import VideoList
@@ -166,7 +167,8 @@ class CompressTab(QWidget):
             else:
                 self.output_picker.dir_edit.setText("")
             if single:
-                self.output_picker.set_filename(cfg.name or f"{paths[row].stem}_compressed")
+                prefix = subfolder_prefix(paths[row], self.video_list.item_root(row))
+                self.output_picker.set_filename(cfg.name or f"{prefix}{paths[row].stem}_compressed")
             else:
                 self.output_picker.set_filename("")
         finally:
@@ -240,7 +242,10 @@ class CompressTab(QWidget):
                 duration = 0.0
                 settings = cfg.settings
             parent = cfg.output_dir if cfg.output_dir is not None else path.parent
-            fallback = f"{path.stem}_compressed"
+            # A video added via a folder bakes its sub-folders into the name, so a
+            # recursive add can flatten into one folder without clashing.
+            prefix = subfolder_prefix(path, self.video_list.item_root(row))
+            fallback = f"{prefix}{path.stem}_compressed"
             stem = safe_stem(cfg.name.strip() or fallback, fallback)
             base = parent / f"{stem}.{settings.container}"
             output_path = unique_output_path(base, taken)

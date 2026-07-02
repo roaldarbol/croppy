@@ -100,6 +100,8 @@ def clip_output_path(
     input_path: Path,
     crop_index: int | None,
     trim_index: int | None,
+    n_crops: int = 1,
+    n_trims: int = 1,
     container: str = "mp4",
     output_dir: Path | None = None,
     stem: str | None = None,
@@ -107,25 +109,29 @@ def clip_output_path(
     """Name one clip output from its crop and/or trim index (each 0-based).
 
     ``stem`` overrides the base name (the user-chosen output name); when omitted
-    or empty it falls back to ``input_path``'s stem. A crop/trim suffix is added
-    only when that dimension is present, so:
+    or empty it falls back to ``input_path``'s stem. A ``_crop``/``_trim`` suffix
+    marks each dimension that was applied so an output always reads as modified.
+    The suffix carries an ordinal only when that axis produced *several* outputs
+    (``n_crops``/``n_trims`` > 1), so a lone crop or trim stays unnumbered:
 
-    * crop only         → ``<stem>_crop<i+1>.<ext>``
-    * trim only         → ``<stem>_trim<j+1>.<ext>``
-    * crop **and** trim → ``<stem>_crop<i+1>_trim<j+1>.<ext>``
-    * neither (a single output) → ``<stem>.<ext>`` (the name verbatim)
+    * crop only, one     → ``<stem>_crop.<ext>``
+    * crop only, several → ``<stem>_crop1.<ext>``, ``<stem>_crop2.<ext>``, …
+    * trim only, one     → ``<stem>_trim.<ext>``
+    * trim only, several → ``<stem>_trim1.<ext>``, …
+    * crop **and** trim  → both suffixes, each numbered only if its axis has many
+    * neither            → ``<stem>.<ext>`` (verbatim; no clip is actually applied)
 
-    The caller passes ``crop_index=trim_index=None`` for a lone output so it
-    keeps the chosen name; uniqueness against existing files is handled by
+    The caller passes ``crop_index``/``trim_index`` as ``None`` for an absent
+    dimension; uniqueness against existing files is handled by
     :func:`unique_output_path`.
     """
     parent = output_dir if output_dir is not None else input_path.parent
     base = safe_stem(stem, input_path.stem) if stem is not None else input_path.stem
     parts: list[str] = []
     if crop_index is not None:
-        parts.append(f"crop{crop_index + 1}")
+        parts.append("crop" if n_crops <= 1 else f"crop{crop_index + 1}")
     if trim_index is not None:
-        parts.append(f"trim{trim_index + 1}")
+        parts.append("trim" if n_trims <= 1 else f"trim{trim_index + 1}")
     name = f"{base}_{'_'.join(parts)}" if parts else base
     return parent / f"{name}.{container}"
 

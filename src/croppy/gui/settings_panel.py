@@ -122,11 +122,11 @@ class SettingsPanel(QWidget):
         row.setContentsMargins(0, 0, 0, 0)
         label = QLabel("Apply:")
         label.setToolTip(
-            "Each row's checkbox decides whether croppy forces that setting or "
+            "Each row's checkbox decides whether Croppy forces that setting or "
             "keeps the source's value. These buttons flip every row at once."
         )
         self.apply_all_btn = QPushButton("All")
-        self.apply_all_btn.setToolTip("Force croppy's value for every setting.")
+        self.apply_all_btn.setToolTip("Force Croppy's value for every setting.")
         self.apply_all_btn.clicked.connect(lambda: self.set_all_applied(True))
         self.match_source_btn = QPushButton("Match source")
         self.match_source_btn.setToolTip(
@@ -246,7 +246,7 @@ class SettingsPanel(QWidget):
 
         self.preserve_ctime_check.setToolTip(
             "Give the output the same 'Date created' as the source clip (Windows "
-            "only). 'Date modified' still shows when croppy wrote the file."
+            "only). 'Date modified' still shows when Croppy wrote the file."
         )
         form.addRow("Creation date:", self.preserve_ctime_check)
 

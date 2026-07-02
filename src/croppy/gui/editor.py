@@ -198,7 +198,9 @@ class EditorWidget(QWidget):
         v.setSpacing(12)
         scroll.setWidget(controls)
 
-        self.summary = QLabel("No video loaded — drop one on the canvas or click to browse.")
+        self.summary = QLabel(
+            "No video loaded — drop a video or folder on the canvas or click to browse."
+        )
         self.summary.setWordWrap(True)
         self.summary.setTextFormat(Qt.TextFormat.RichText)
         self.summary.setStyleSheet("color: #888;")
@@ -211,9 +213,9 @@ class EditorWidget(QWidget):
             with_filename=True,
             filename_label="Basename",
             filename_tooltip=(
-                "Base name for the output file(s). When a clip produces more than one "
-                "output, a _crop/_trim suffix is appended; the file extension is added "
-                "automatically."
+                "Base name for the output file(s). A _crop/_trim suffix is appended for "
+                "whatever was applied (numbered when there are several); the file "
+                "extension is added automatically."
             ),
         )
         v.addWidget(self.output_picker)

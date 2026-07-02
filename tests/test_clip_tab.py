@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from PySide6.QtCore import QRectF
 
@@ -35,6 +35,21 @@ def test_opens_multiple_videos(qtbot, qapp, test_video: Path, tmp_path: Path) ->
     assert tab.videos_list.count() == 2
     # The most recently opened video is selected.
     assert tab.current_editor() is tab._videos[1].editor
+
+
+def test_browse_folder_opens_every_video_within(
+    qtbot, qapp, test_video: Path, tmp_path: Path
+) -> None:
+    tab = ClipTab(CompressionController(), MagicMock())
+    qtbot.addWidget(tab)
+    root = tmp_path / "clips"
+    (root / "sub").mkdir(parents=True)
+    a = _copy(test_video, root / "a.mp4")
+    c = _copy(test_video, root / "sub" / "c.mp4")
+    with patch("croppy.gui.clip_tab.QFileDialog.getExistingDirectory", return_value=str(root)):
+        tab.open_videos = MagicMock()
+        tab._browse_folder()
+    tab.open_videos.assert_called_once_with([a, c])
 
 
 def test_open_videos_lists_all_and_selects_first(
@@ -104,7 +119,8 @@ def test_queue_editor_cross_products_crops_and_trims(
     # 2 crops x 1 trim = 2 jobs, each carrying a resolved (start, duration) trim.
     assert len(submitted) == 2
     names = sorted(j.output_path.name for j in submitted)
-    assert names == ["a_crop1_trim1.mp4", "a_crop2_trim1.mp4"]
+    # 2 crops → numbered; the single shared trim stays unnumbered.
+    assert names == ["a_crop1_trim.mp4", "a_crop2_trim.mp4"]
     assert all(j.trim is not None for j in submitted)
 
 
@@ -127,8 +143,8 @@ def test_queue_editor_trim_only_uses_full_frame(
     job = submitted[0]
     assert job.region is None  # no crop → full frame
     assert job.trim is not None
-    # A lone output keeps the chosen name verbatim (no _trim1 suffix).
-    assert job.output_path.name == "snip.mp4"
+    # A lone trim gets an unnumbered _trim suffix so it still reads as modified.
+    assert job.output_path.name == "snip_trim.mp4"
 
 
 def test_duplicate_copies_crops_and_settings(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
@@ -165,13 +181,13 @@ def test_queue_uniquifies_repeat_outputs(qtbot, qapp, test_video: Path, tmp_path
     editor.output_picker.set_filename("out")
     editor.canvas.add_crop(QRectF(0, 0, 100, 100))
 
-    editor.process_btn.click()  # out.mp4
-    editor.process_btn.click()  # out-2.mp4
+    editor.process_btn.click()  # out_crop.mp4
+    editor.process_btn.click()  # out_crop-2.mp4
     names = [j.output_path.name for j in submitted]
-    assert names == ["out.mp4", "out-2.mp4"]
+    assert names == ["out_crop.mp4", "out_crop-2.mp4"]
 
 
-def test_queue_single_output_uses_custom_name_verbatim(
+def test_queue_single_output_appends_unnumbered_suffix(
     qtbot, qapp, test_video: Path, tmp_path: Path
 ) -> None:
     submitted: list = []
@@ -186,7 +202,8 @@ def test_queue_single_output_uses_custom_name_verbatim(
     editor.canvas.add_crop(QRectF(0, 0, 100, 100))
 
     editor.process_btn.click()
-    assert [j.output_path.name for j in submitted] == ["interview.mp4"]
+    # A lone crop still marks the custom name as modified, just without a number.
+    assert [j.output_path.name for j in submitted] == ["interview_crop.mp4"]
 
 
 def test_queue_multiple_outputs_append_suffix_to_custom_name(

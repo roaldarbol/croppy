@@ -198,7 +198,7 @@ class SettingsTab(QWidget):
             save_preset(self.settings_panel.settings(), path)
         except OSError as exc:
             logger.warning("Could not export preset to {}: {}", path, exc)
-            QMessageBox.warning(self, "croppy", f"Could not write the preset:<br><br>{exc}")
+            QMessageBox.warning(self, "Croppy", f"Could not write the preset:<br><br>{exc}")
             return
         self._status.setText(f"Exported to {path.name} ✓")
 
@@ -212,7 +212,7 @@ class SettingsTab(QWidget):
             settings = load_preset(Path(path_str))
         except PresetError as exc:
             logger.warning("Could not import preset from {}: {}", path_str, exc)
-            QMessageBox.warning(self, "croppy", f"Could not import the preset:<br><br>{exc}")
+            QMessageBox.warning(self, "Croppy", f"Could not import the preset:<br><br>{exc}")
             return
         # Load into the form only; the user still clicks "Save settings" to make
         # it the persisted default (so import never silently changes the default).

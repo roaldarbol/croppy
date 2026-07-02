@@ -84,6 +84,35 @@ def test_duplicate_selected(qtbot, qapp, test_video: Path, tmp_path: Path) -> No
     assert vl.paths() == [paths[0], paths[0], paths[1]]
 
 
+def test_add_paths_expands_a_folder(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
+    vl = VideoList()
+    qtbot.addWidget(vl)
+    root = tmp_path / "clips"
+    (root / "sub").mkdir(parents=True)
+    a = root / "a.mp4"
+    c = root / "sub" / "c.mp4"
+    shutil.copy(test_video, a)
+    shutil.copy(test_video, c)
+    with qtbot.waitSignal(vl.changed, timeout=500):
+        vl.add_paths([root])
+    assert vl.paths() == [a, c]
+    # Each row remembers the folder it came from, so a chosen output can flatten
+    # with the sub-tree baked into the name.
+    assert vl.item_root(0) == root
+    assert vl.item_root(1) == root
+
+
+def test_add_paths_records_file_parent_as_root(
+    qtbot, qapp, test_video: Path, tmp_path: Path
+) -> None:
+    vl = VideoList()
+    qtbot.addWidget(vl)
+    a = tmp_path / "a.mp4"
+    shutil.copy(test_video, a)
+    vl.add_paths([a])
+    assert vl.item_root(0) == tmp_path
+
+
 def test_dropped_files_are_added(qtbot, qapp, test_video: Path, tmp_path: Path) -> None:
     vl = VideoList()
     qtbot.addWidget(vl)

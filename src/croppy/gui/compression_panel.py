@@ -172,7 +172,7 @@ class CompressionPanel(QWidget):
             save_preset(self.settings(), path)
         except OSError as exc:
             logger.warning("Could not export preset to {}: {}", path, exc)
-            QMessageBox.warning(self, "croppy", f"Could not write the preset:<br><br>{exc}")
+            QMessageBox.warning(self, "Croppy", f"Could not write the preset:<br><br>{exc}")
 
     def _import_preset(self) -> None:
         path_str, _ = QFileDialog.getOpenFileName(
@@ -184,7 +184,7 @@ class CompressionPanel(QWidget):
             settings = load_preset(Path(path_str))
         except PresetError as exc:
             logger.warning("Could not import preset from {}: {}", path_str, exc)
-            QMessageBox.warning(self, "croppy", f"Could not import the preset:<br><br>{exc}")
+            QMessageBox.warning(self, "Croppy", f"Could not import the preset:<br><br>{exc}")
             return
         # Apply like a manual edit: detach from the default and notify the owning
         # tab so it persists to the selected item/group.

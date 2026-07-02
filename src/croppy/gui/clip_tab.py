@@ -16,6 +16,7 @@ from loguru import logger
 from PySide6.QtCore import QRectF, Qt, Signal
 from PySide6.QtGui import QImage
 from PySide6.QtWidgets import (
+    QFileDialog,
     QHBoxLayout,
     QListWidget,
     QMessageBox,
@@ -33,6 +34,7 @@ from croppy.ffmpeg.probe import VideoInfo, probe
 from croppy.gui.compression_panel import CompressionController
 from croppy.gui.constants import PANEL_MARGIN, panel_header
 from croppy.gui.editor import EditorWidget
+from croppy.gui.landing import folder_videos
 from croppy.gui.media_loader import MediaLoader
 from croppy.jobs.job import ClipJob
 from croppy.jobs.queue import JobQueue
@@ -85,6 +87,9 @@ class ClipTab(QWidget):
         self.add_btn = QPushButton("Add video…")
         self.add_btn.clicked.connect(self._browse_video)
         lb.addWidget(self.add_btn)
+        self.add_folder_btn = QPushButton("Add folder…")
+        self.add_folder_btn.clicked.connect(self._browse_folder)
+        lb.addWidget(self.add_folder_btn)
         edit_row = QHBoxLayout()
         edit_row.setSpacing(PANEL_MARGIN)
         self.duplicate_btn = QPushButton("Duplicate")
@@ -142,7 +147,7 @@ class ClipTab(QWidget):
             logger.error("Could not open {}: {}", path, message)
             self._remove_editor(editor)
             QMessageBox.critical(
-                self, "croppy", f"Could not open <b>{path.name}</b>:<br><br>{message}"
+                self, "Croppy", f"Could not open <b>{path.name}</b>:<br><br>{message}"
             )
 
         self._loader.submit(lambda: probe_with_first_frame(path), done, failed)
@@ -168,6 +173,13 @@ class ClipTab(QWidget):
         # Reuse the placeholder editor's file dialog (covers the empty state too);
         # it allows selecting several videos, each opened as its own list entry.
         self._placeholder._browse_input_videos()
+
+    def _browse_folder(self) -> None:
+        # Open every video inside a chosen folder (recursively), each as its own
+        # entry — the same result as dropping the folder onto the editor.
+        folder = QFileDialog.getExistingDirectory(self, "Add a folder of videos")
+        if folder:
+            self.open_videos(folder_videos(Path(folder)))
 
     def _duplicate_current(self) -> None:
         row = self.videos_list.currentRow()
@@ -270,7 +282,7 @@ class ClipTab(QWidget):
             if self._video_for(editor) is not None:
                 editor.reload_btn.setEnabled(True)
             QMessageBox.warning(
-                self, "croppy", f"Could not extract frame {frame_number}:<br><br>{message}"
+                self, "Croppy", f"Could not extract frame {frame_number}:<br><br>{message}"
             )
 
         self._loader.submit(
@@ -298,9 +310,9 @@ class ClipTab(QWidget):
         # choice so crop-only and trim-only both still produce one axis of jobs.
         region_choices = regions or [None]
         trim_choices = trims or [None]
-        # A lone output keeps the chosen name verbatim; only when several files
-        # come from one video do we append _crop/_trim to keep them distinct.
-        many = len(region_choices) * len(trim_choices) > 1
+        # Every output that was cropped and/or trimmed gets a _crop/_trim suffix so
+        # it reads as modified; the suffix is numbered only when that axis produced
+        # several outputs (see clip_output_path).
         stem = editor.output_name()
         count = 0
         for ci, region in enumerate(region_choices):
@@ -308,8 +320,10 @@ class ClipTab(QWidget):
                 output_path = unique_output_path(
                     clip_output_path(
                         video.path,
-                        crop_index=ci if (many and regions) else None,
-                        trim_index=ti if (many and trims) else None,
+                        crop_index=ci if regions else None,
+                        trim_index=ti if trims else None,
+                        n_crops=len(regions),
+                        n_trims=len(trims),
                         container=settings.container,
                         output_dir=output_dir,
                         stem=stem,

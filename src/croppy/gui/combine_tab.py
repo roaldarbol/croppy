@@ -288,7 +288,7 @@ class CombineTab(QWidget):
         if len(paths) < 2:
             return
         if group.output_dir is None:
-            QMessageBox.warning(self, "croppy", "Choose an output folder for this group first.")
+            QMessageBox.warning(self, "Croppy", "Choose an output folder for this group first.")
             return
 
         taken = {job.output_path for job in self._queue.jobs()}

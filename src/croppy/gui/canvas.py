@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
 
 from croppy.gui.crop_item import CropRectItem
 from croppy.gui.drop_hint import DropHint
-from croppy.gui.landing import accepted_videos, first_accepted
+from croppy.gui.landing import accepted_videos, has_accepted_input
 from croppy.gui.theme import primary_surface, watch_app_palette
 
 _DRAFT_MIN_SIDE = 6.0
@@ -58,7 +58,9 @@ class VideoCanvas(QGraphicsView):
         self._draft_origin: QPointF | None = None
 
         # Centered logo + prompt shown until a video is loaded.
-        self._placeholder = DropHint("Drop a video here\nor click to browse", self.viewport())
+        self._placeholder = DropHint(
+            "Drop a video or folder here\nor click to browse", self.viewport()
+        )
         self._position_overlays()
 
         self._scene.selectionChanged.connect(self._emit_selection)
@@ -159,13 +161,13 @@ class VideoCanvas(QGraphicsView):
         super().mousePressEvent(event)
 
     def dragEnterEvent(self, event) -> None:
-        if first_accepted(event.mimeData().urls()) is not None:
+        if has_accepted_input(event.mimeData().urls()):
             event.acceptProposedAction()
         else:
             event.ignore()
 
     def dragMoveEvent(self, event) -> None:
-        if first_accepted(event.mimeData().urls()) is not None:
+        if has_accepted_input(event.mimeData().urls()):
             event.acceptProposedAction()
         else:
             event.ignore()

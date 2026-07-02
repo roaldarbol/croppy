@@ -235,21 +235,25 @@ def test_trim_to_seconds_matches_inclusive_frames() -> None:
 
 def test_clip_output_path_naming(tmp_path: Path) -> None:
     src = tmp_path / "movie.mp4"
-    # Crop only → unchanged legacy name.
-    assert clip_output_path(src, crop_index=0, trim_index=None).name == "movie_crop1.mp4"
-    # Trim only.
-    assert clip_output_path(src, crop_index=None, trim_index=2).name == "movie_trim3.mp4"
-    # Both, with container + output dir honored.
-    out = clip_output_path(src, crop_index=1, trim_index=0, container="mkv", output_dir=tmp_path)
-    assert out == tmp_path / "movie_crop2_trim1.mkv"
+    # A lone crop/trim gets an unnumbered suffix (still marked as modified).
+    assert clip_output_path(src, crop_index=0, trim_index=None).name == "movie_crop.mp4"
+    assert clip_output_path(src, crop_index=None, trim_index=0).name == "movie_trim.mp4"
+    # Several along an axis → that suffix carries a 1-based ordinal.
+    assert clip_output_path(src, crop_index=1, trim_index=None, n_crops=3).name == "movie_crop2.mp4"
+    assert clip_output_path(src, crop_index=None, trim_index=2, n_trims=3).name == "movie_trim3.mp4"
+    # Both axes; each is numbered only if its own axis has several outputs.
+    out = clip_output_path(
+        src, crop_index=1, trim_index=0, n_crops=2, n_trims=1, container="mkv", output_dir=tmp_path
+    )
+    assert out == tmp_path / "movie_crop2_trim.mkv"
 
 
 def test_clip_output_path_custom_stem(tmp_path: Path) -> None:
     src = tmp_path / "movie.mp4"
-    # A lone output (no indices) keeps the chosen name verbatim.
+    # A lone output (no crop, no trim) keeps the chosen name verbatim.
     assert clip_output_path(src, None, None, stem="final").name == "final.mp4"
-    # A crop index still appends the suffix to the chosen name.
-    assert clip_output_path(src, 0, None, stem="final").name == "final_crop1.mp4"
+    # A crop still appends the (unnumbered) suffix to the chosen name.
+    assert clip_output_path(src, 0, None, stem="final").name == "final_crop.mp4"
     # No stem at all → the source stem, verbatim for a lone output.
     assert clip_output_path(src, None, None).name == "movie.mp4"
 
