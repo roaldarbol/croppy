@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtWidgets import QMainWindow, QTabWidget
+from PySide6.QtWidgets import QApplication, QMainWindow, QTabWidget
 
 from croppy.config import load_parallel_enabled, save_parallel_enabled
 from croppy.gui.clip_tab import ClipTab
@@ -24,7 +24,7 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Croppy")
-        self.resize(1340, 820)
+        self._open_at_a_fitting_size()
 
         # App-wide border styling (GitHub-like), refreshed on a live theme switch.
         apply_app_theme()
@@ -82,6 +82,26 @@ class MainWindow(QMainWindow):
         super().closeEvent(event)
 
     # --- internals ----------------------------------------------------------
+
+    def _open_at_a_fitting_size(self) -> None:
+        """Open at a comfortable size, but never larger than the screen.
+
+        The preferred 1340×820 overflows a small laptop display (e.g. a 13"
+        MacBook at 1280×800), so clamp to the available area (minus a margin for
+        the menu bar / dock) and centre the window there.
+        """
+        preferred_w, preferred_h = 1340, 820
+        screen = self.screen() or QApplication.primaryScreen()
+        if screen is None:
+            self.resize(preferred_w, preferred_h)
+            return
+        available = screen.availableGeometry()
+        width = min(preferred_w, available.width() - 40)
+        height = min(preferred_h, available.height() - 40)
+        self.resize(width, height)
+        frame = self.frameGeometry()
+        frame.moveCenter(available.center())
+        self.move(frame.topLeft())
 
     def _on_parallel_toggled(self, enabled: bool) -> None:
         save_parallel_enabled(enabled)

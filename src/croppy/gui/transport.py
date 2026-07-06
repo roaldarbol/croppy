@@ -171,9 +171,11 @@ class TransportBar(QWidget):
         self._goto_edit = QLineEdit()
         self._goto_edit.setPlaceholderText("Go to HH:MM:SS.mmm")
         self._goto_edit.setToolTip("Jump to a timecode")
-        # Take up the row's slack so there's plenty of room to type a timecode.
+        # Take up the row's slack so there's plenty of room to type a timecode,
+        # and absorb the mark buttons' caption-growth. A small minimum lets the
+        # whole bar compress on narrow windows.
         self._goto_edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self._goto_edit.setMinimumWidth(160)
+        self._goto_edit.setMinimumWidth(90)
         self._goto_edit.returnPressed.connect(self._on_goto)
         row.addWidget(self._goto_edit, 1)
 
@@ -191,18 +193,11 @@ class TransportBar(QWidget):
         self._end_btn = QPushButton("End")
         self._end_btn.setToolTip("Capture the current frame as the trim end")
         self._end_btn.clicked.connect(self._mark_end)
-        # Pin the mark buttons to their widest label (across both units) so
-        # capturing a value doesn't resize them and shove Add Trim around.
-        fm = self._start_btn.fontMetrics()
-        pin = (
-            max(
-                fm.horizontalAdvance("Start · 00:00:00.000"),
-                fm.horizontalAdvance("Start · frame 9999999"),
-            )
-            + 20
-        )
+        # Let the mark buttons size to their text (compact until a value is
+        # captured) so the transport stays narrow enough for small screens.
+        # Their caption-growth is taken from the expanding "Go to" field to its
+        # left, so Add Trim doesn't shift.
         for btn in (self._start_btn, self._end_btn):
-            btn.setFixedWidth(pin)
             row.addWidget(btn)
 
         self._trim_btn = QPushButton("Add Trim")

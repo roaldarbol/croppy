@@ -17,9 +17,11 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QDialog,
     QFileDialog,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QScrollArea,
     QSplitter,
     QVBoxLayout,
     QWidget,
@@ -86,9 +88,24 @@ class CompressTab(QWidget):
 
         side = QWidget(splitter)
         side.setMinimumWidth(280)
-        v = QVBoxLayout(side)
-        v.setContentsMargins(PANEL_MARGIN, PANEL_HEADER_HEIGHT, PANEL_MARGIN, PANEL_MARGIN)
+        # Scroll the controls (with the queue button pinned below) so the tall
+        # encoding form never forces the window past a small screen's height.
+        outer = QVBoxLayout(side)
+        outer.setContentsMargins(PANEL_MARGIN, PANEL_HEADER_HEIGHT, PANEL_MARGIN, PANEL_MARGIN)
+        outer.setSpacing(12)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.viewport().setAutoFillBackground(False)
+        outer.addWidget(scroll, 1)
+        gutter = scroll.verticalScrollBar().sizeHint().width() or 16
+        controls = QWidget()
+        controls.setAutoFillBackground(False)
+        v = QVBoxLayout(controls)
+        v.setContentsMargins(0, 0, gutter, 0)
         v.setSpacing(12)
+        scroll.setWidget(controls)
 
         hint = QLabel(
             "Add videos to compress. Each becomes <name>_compressed next to the "
@@ -125,10 +142,10 @@ class CompressTab(QWidget):
         self.queue_btn = QPushButton("Add Job to Queue")
         self.queue_btn.setEnabled(False)
         self.queue_btn.clicked.connect(self._queue_jobs)
-        v.addWidget(self.queue_btn)
+        outer.addWidget(self.queue_btn)
 
         self.queued_flash = StatusFlash()
-        v.addWidget(self.queued_flash)
+        outer.addWidget(self.queued_flash)
 
         splitter.addWidget(side)
         splitter.setStretchFactor(0, 1)
