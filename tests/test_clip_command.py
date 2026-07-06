@@ -191,6 +191,23 @@ def test_trim_adds_input_ss_and_output_t(tmp_path: Path) -> None:
     assert cmd[t_idx + 1] == "4.000000"
 
 
+def test_trim_output_t_is_scaled_by_speed(tmp_path: Path) -> None:
+    # The -t bounds the *output* timeline; under a speed change it must be scaled
+    # so ffmpeg stops after reading the trim, not after the whole (retimed) file.
+    from croppy.models import DEFAULT_APPLIED
+
+    cmd = build_clip_command(
+        input_path=tmp_path / "in.mp4",
+        output_path=tmp_path / "out.mp4",
+        region=None,
+        settings=EncodeSettings(encoder="libx264", speed=100, applied=DEFAULT_APPLIED | {"speed"}),
+        trim=(0.0, 922.8),
+    )
+    # -ss still seeks the source at 0; -t is 922.8 / 100 = 9.228s of output.
+    assert cmd[cmd.index("-ss") + 1] == "0.000000"
+    assert cmd[cmd.index("-t") + 1] == "9.228000"
+
+
 def test_no_trim_has_no_seek(tmp_path: Path) -> None:
     cmd = build_clip_command(
         input_path=tmp_path / "in.mp4",

@@ -50,6 +50,9 @@ def summarize_settings(settings: EncodeSettings) -> str:
     if settings.is_on("fps") and settings.fps > 0:
         fps = int(settings.fps) if float(settings.fps).is_integer() else settings.fps
         parts.append(f"{fps}fps")
+    if settings.is_on("speed") and settings.speed != 1:
+        speed = int(settings.speed) if float(settings.speed).is_integer() else settings.speed
+        parts.append(f"{speed}×")
     return " · ".join(parts) if parts else "Match source"
 
 

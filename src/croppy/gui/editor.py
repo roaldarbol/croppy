@@ -20,7 +20,6 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QPushButton,
     QScrollArea,
-    QSpinBox,
     QSplitter,
     QVBoxLayout,
     QWidget,
@@ -34,12 +33,12 @@ from croppy.gui.crop_item import CropRectItem
 from croppy.gui.landing import file_dialog_filter
 from croppy.gui.output_picker import OutputFolderPicker
 from croppy.gui.status_flash import StatusFlash, queued_message
+from croppy.gui.transport import TransportBar
 from croppy.gui.trim_panel import TrimPanel
 from croppy.models import CropRegion, EncodeSettings, Trim
 
 
 class EditorWidget(QWidget):
-    frame_change_requested = Signal(int)
     videos_change_requested = Signal(list)  # videos to open (list[Path])
     folder_dropped = Signal(Path)  # a folder dropped on the canvas (opens the batch dialog)
     process_requested = Signal()
@@ -75,18 +74,23 @@ class EditorWidget(QWidget):
 
     # --- public API ---------------------------------------------------------
 
-    def load(self, info: VideoInfo, image: QImage) -> None:
-        """Populate the editor with a probed video and its preview frame.
+    def load(self, info: VideoInfo, image: QImage | None = None) -> None:
+        """Populate the editor with a probed video and start its preview player.
 
         A new video starts clean: previous crops are cleared and the compression
         panel is reset to the default. The output folder is intentionally kept.
+        ``image``, when given, is shown as an instant poster while the player
+        loads the media (avoiding a black rectangle on large / networked clips).
         """
         self._info = info
         self._sidebar.setEnabled(True)
         # Crops and compression belong to the old clip — drop them.
         self.canvas.clear_crops()
         self.compression.reset_to(self._controller.default())
-        self.canvas.set_image(image)
+        if image is not None:
+            self.canvas.set_image(image)
+        player = self.canvas.attach_video(info.path, info.width, info.height)
+        self.transport.bind(player, info.fps, info.nb_frames)
 
         nframes = f" · {info.nb_frames} frames" if info.nb_frames is not None else ""
         self.summary.setText(
@@ -101,10 +105,6 @@ class EditorWidget(QWidget):
         # trim suffix (and extension) are still derived at queue time.
         self.output_picker.set_filename(info.path.stem)
 
-        self.frame_spin.setMaximum(info.nb_frames or 1_000_000_000)
-        self.frame_spin.setValue(1)
-        self.frame_spin.setEnabled(True)
-        self.reload_btn.setEnabled(True)
         # Trims belong to the old clip too — rebind the panel to this one.
         self.trim.configure(info.fps, info.nb_frames)
         self._refresh_crops()
@@ -157,12 +157,22 @@ class EditorWidget(QWidget):
         # other columns' headers (and a matching bottom margin), so the canvas
         # lines up with the video list and sidebar boxes top and bottom.
         self.canvas = VideoCanvas()
+        # Build the sidebar first: it creates the Trim panel the transport marks
+        # into, so its start/end signals can be wired up below.
+        sidebar = self._build_sidebar(splitter)
         canvas_wrap = QWidget(splitter)
         cw = QVBoxLayout(canvas_wrap)
         cw.setContentsMargins(0, PANEL_HEADER_HEIGHT, 0, PANEL_MARGIN)
-        cw.addWidget(self.canvas)
+        cw.addWidget(self.canvas, 1)
+        # Transport strip spanning the canvas width: play/scrub the preview and
+        # drop the current frame into the Trim panel as a start or an end.
+        self.transport = TransportBar()
+        self.transport.trim_created.connect(self._add_trim)
+        # One unit toggle in the navigator drives the Trim list's format too.
+        self.transport.display_mode_changed.connect(self.trim.set_display_frames)
+        cw.addWidget(self.transport)
         splitter.addWidget(canvas_wrap)
-        splitter.addWidget(self._build_sidebar(splitter))
+        splitter.addWidget(sidebar)
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 0)
         splitter.setSizes([800, 300])
@@ -222,20 +232,6 @@ class EditorWidget(QWidget):
         )
         v.addWidget(self.output_picker)
 
-        frame_group = QGroupBox("Preview frame")
-        fl = QHBoxLayout(frame_group)
-        self.frame_spin = QSpinBox()
-        self.frame_spin.setMinimum(1)
-        self.frame_spin.setMaximum(1_000_000_000)
-        self.frame_spin.setValue(1)
-        self.frame_spin.setEnabled(False)
-        self.reload_btn = QPushButton("Reload")
-        self.reload_btn.setEnabled(False)
-        self.reload_btn.clicked.connect(self._emit_frame_change)
-        fl.addWidget(self.frame_spin, 1)
-        fl.addWidget(self.reload_btn, 0)
-        v.addWidget(frame_group)
-
         crops_group = QGroupBox("Crops")
         cl = QVBoxLayout(crops_group)
         self.crops_list = QListWidget()
@@ -248,7 +244,7 @@ class EditorWidget(QWidget):
         cl.addWidget(self.empty_label)
         v.addWidget(crops_group)
 
-        self.trim = TrimPanel(current_frame_provider=lambda: self.frame_spin.value())
+        self.trim = TrimPanel()
         self.trim.trims_changed.connect(self._update_queue_state)
         v.addWidget(self.trim)
 
@@ -286,8 +282,9 @@ class EditorWidget(QWidget):
 
     # --- signal handlers ----------------------------------------------------
 
-    def _emit_frame_change(self) -> None:
-        self.frame_change_requested.emit(self.frame_spin.value())
+    def _add_trim(self, start_frame: int, end_frame: int) -> None:
+        """Add a start–end range marked in the transport bar to the Trim list."""
+        self.trim.add_trim(Trim(start_frame=start_frame, end_frame=end_frame))
 
     def _refresh_crops(self) -> None:
         items = self.canvas.crops()

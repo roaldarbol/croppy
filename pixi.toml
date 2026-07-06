@@ -19,6 +19,7 @@ pyside6 = ">=6.7"
 typer = ">=0.12"
 loguru = ">=0.7"
 ffmpeg = ">=6"
+qt6-multimedia = ">=6.7"
 
 [pypi-dependencies]
 croppy = { path = ".", editable = true }

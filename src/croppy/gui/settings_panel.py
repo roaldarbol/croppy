@@ -67,6 +67,7 @@ _ROW_DEPENDENCY = {
     "container": "any",
     "encoder": "any",
     "fps": "any",
+    "speed": "any",
     "audio": "any",
     "cq": "nvenc",
     "nvenc_preset": "nvenc",
@@ -174,6 +175,12 @@ class SettingsPanel(QWidget):
         self.fps_spin.setDecimals(2)
         self.fps_spin.setSingleStep(1.0)
 
+        self.speed_spin = QDoubleSpinBox()
+        self.speed_spin.setRange(0.1, 100.0)
+        self.speed_spin.setDecimals(2)
+        self.speed_spin.setSingleStep(0.5)
+        self.speed_spin.setSuffix("×")
+
         self.audio_bitrate_combo = QComboBox()
         self.audio_bitrate_combo.addItems(AUDIO_BITRATES)
 
@@ -214,6 +221,15 @@ class SettingsPanel(QWidget):
                 "Frame rate",
                 self.fps_spin,
                 "Resample to this many frames per second.\nOff = keep the source rate.\n"
+                "Runs on the CPU, so it disables GPU-accelerated decoding for the job.",
+            ),
+            (
+                "speed",
+                "Speed",
+                self.speed_spin,
+                "Play faster (>1) or slower (<1) — e.g. 0.5 = half speed, 2 = double, "
+                "100 = ×100 timelapse.\nAudio is dropped at any non-1 speed.\n"
+                "Combine with Frame rate for a normal-fps timelapse.\n"
                 "Runs on the CPU, so it disables GPU-accelerated decoding for the job.",
             ),
             (
@@ -260,6 +276,7 @@ class SettingsPanel(QWidget):
             self.preset_combo,
             self.pixfmt_combo,
             self.fps_spin,
+            self.speed_spin,
             self.audio_bitrate_combo,
         ):
             field.setMinimumWidth(130)
@@ -279,6 +296,7 @@ class SettingsPanel(QWidget):
             self.cq_spin,
             self.crf_spin,
             self.fps_spin,
+            self.speed_spin,
         ):
             widget.valueChanged.connect(self._emit)
         for combo in (
@@ -303,6 +321,7 @@ class SettingsPanel(QWidget):
             crf=self.crf_spin.value(),
             pixel_format=self.pixfmt_combo.currentText(),
             fps=self.fps_spin.value(),
+            speed=self.speed_spin.value(),
             audio_bitrate=self.audio_bitrate_combo.currentText(),
             faststart=self.faststart_check.isChecked(),
             preserve_created_time=self.preserve_ctime_check.isChecked(),
@@ -327,6 +346,7 @@ class SettingsPanel(QWidget):
             if settings.pixel_format in PIXEL_FORMATS:
                 self.pixfmt_combo.setCurrentText(settings.pixel_format)
             self.fps_spin.setValue(settings.fps)
+            self.speed_spin.setValue(settings.speed)
             if settings.audio_bitrate in AUDIO_BITRATES:
                 self.audio_bitrate_combo.setCurrentText(settings.audio_bitrate)
             self.faststart_check.setChecked(settings.faststart)

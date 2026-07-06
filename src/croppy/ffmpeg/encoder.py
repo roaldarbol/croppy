@@ -142,8 +142,46 @@ def fps_filter(settings: EncodeSettings) -> str | None:
     return f"fps={text}"
 
 
+def speed_filter(settings: EncodeSettings) -> str | None:
+    """Return the ``setpts=`` video filter for a speed change, else ``None``.
+
+    ``EncodeSettings.speed`` retimes video by rescaling presentation timestamps:
+    ``setpts=PTS/N`` runs the clip N× faster (N>1) or slower (N<1) — so 100 gives
+    a ×100 timelapse and 0.1 a ×10 slow-motion. Returned only when "speed" is
+    applied and the factor is a real change (positive and not 1.0). It selects no
+    frames itself, so pairing it with :func:`fps_filter` (which must come *after*
+    it) resamples the retimed stream to a sane output rate.
+
+    Like ``fps`` this is a CPU-side filter, so callers that apply it must decode
+    on the CPU (``allow_hwaccel_decode=False``).
+    """
+    if not settings.is_on("speed") or settings.speed <= 0 or settings.speed == 1:
+        return None
+    value = settings.speed
+    text = str(int(value)) if float(value).is_integer() else str(value)
+    return f"setpts=PTS/{text}"
+
+
+def output_duration_seconds(settings: EncodeSettings, source_seconds: float) -> float:
+    """Scale a source duration to the encoded output's length for a speed change.
+
+    A ×N speed makes the output ``source_seconds / N`` long, so progress bars key
+    off this rather than the source duration. With no active speed it is a no-op.
+    """
+    if speed_filter(settings) is None:
+        return source_seconds
+    return source_seconds / settings.speed
+
+
 def audio_args(settings: EncodeSettings) -> list[str]:
-    """``-c:a`` flags: re-encode to AAC when "audio" is applied, else stream-copy."""
+    """``-c:a`` flags for the output.
+
+    A non-1 speed drops audio entirely (``-an``): ``setpts`` retimes only video,
+    so keeping the source audio would desync. Otherwise re-encode to AAC when
+    "audio" is applied, else stream-copy the source track.
+    """
+    if speed_filter(settings) is not None:
+        return ["-an"]
     if settings.is_on("audio"):
         return ["-c:a", "aac", "-b:a", settings.audio_bitrate]
     return ["-c:a", "copy"]

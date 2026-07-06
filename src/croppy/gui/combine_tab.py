@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
 )
 
 from croppy.ffmpeg.clip import safe_stem, unique_output_path
+from croppy.ffmpeg.encoder import output_duration_seconds
 from croppy.ffmpeg.probe import ProbeError, probe
 from croppy.gui.compression_panel import CompressionController, CompressionPanel
 from croppy.gui.constants import (
@@ -311,7 +312,7 @@ class CombineTab(QWidget):
             settings = group.settings
         job = CombineJob(
             output_path=output_path,
-            duration_seconds=_total_duration(paths),
+            duration_seconds=output_duration_seconds(settings, _total_duration(paths)),
             inputs=paths,
             settings=settings,
         )

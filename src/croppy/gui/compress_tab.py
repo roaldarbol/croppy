@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 )
 
 from croppy.ffmpeg.clip import safe_stem, unique_output_path
+from croppy.ffmpeg.encoder import output_duration_seconds
 from croppy.ffmpeg.probe import ProbeError, probe
 from croppy.gui.batch_dialog import BatchAddDialog
 from croppy.gui.compression_panel import (
@@ -280,7 +281,7 @@ class CompressTab(QWidget):
             taken.add(output_path)
             job = CompressJob(
                 output_path=output_path,
-                duration_seconds=duration,
+                duration_seconds=output_duration_seconds(settings, duration),
                 input_path=path,
                 settings=settings,
             )

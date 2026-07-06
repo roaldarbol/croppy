@@ -161,6 +161,18 @@ def test_faststart_disabled_for_mkv(qtbot, qapp) -> None:
     assert panel.faststart_check.isEnabled()
 
 
+def test_speed_off_by_default_and_round_trips(qtbot, qapp) -> None:
+    panel = SettingsPanel()
+    qtbot.addWidget(panel)
+    # Speed is an opt-in override — off unless the user turns it on.
+    assert "speed" not in panel.settings().applied
+    assert panel.settings().speed == 1.0
+    target = EncodeSettings(speed=2.5, applied=DEFAULT_APPLIED | {"speed"})
+    panel.set_settings(target)
+    assert panel.speed_spin.value() == 2.5
+    assert panel.settings() == target
+
+
 def test_preserve_created_time_round_trip(qtbot, qapp) -> None:
     panel = SettingsPanel()
     qtbot.addWidget(panel)

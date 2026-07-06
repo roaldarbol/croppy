@@ -12,7 +12,7 @@ from PySide6.QtWidgets import QApplication
 
 from croppy import __version__
 from croppy.gui.main_window import MainWindow
-from croppy.logging import set_level
+from croppy.logging import install_qt_logging, set_level
 from croppy.resources import app_icon
 
 
@@ -23,6 +23,9 @@ def run(video: Path | None = None, log_level_override: str | None = None) -> int
     user last chose in the Settings tab is applied.
     """
     logger.info("croppy {} starting", __version__)
+    # Route Qt/ffmpeg backend messages through loguru and mute its stderr banner
+    # + per-file format dump before any media player is created.
+    install_qt_logging()
     qt_app = QApplication.instance() or QApplication(sys.argv)
     qt_app.setApplicationName("croppy")
     # Display name is the user-facing label (window title, menus); keep the
