@@ -140,10 +140,10 @@ class TransportBar(QWidget):
         self._slider.sliderPressed.connect(self._on_slider_pressed)
         outer.addWidget(self._slider)
 
-        # Row 2: transport toggles on the left, trim marking on the right.
-        row = QHBoxLayout()
-        row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(6)
+        # Row 2: playback controls (play, unit, readout, go-to, mute).
+        play_row = QHBoxLayout()
+        play_row.setContentsMargins(0, 0, 0, 0)
+        play_row.setSpacing(6)
 
         self._play_btn = QToolButton()
         self._play_btn.setText("▶")
@@ -152,7 +152,7 @@ class TransportBar(QWidget):
         # The ▶ and ⏸ glyphs differ in width; pin the button so toggling doesn't
         # reflow the row (and nudge the canvas above it).
         _pin_toggle_width(self._play_btn, "▶", "⏸")
-        row.addWidget(self._play_btn)
+        play_row.addWidget(self._play_btn)
 
         # Choose whether positions/marks read as timecodes or frame numbers —
         # showing one keeps the Trim rows short enough to read in full.
@@ -161,23 +161,22 @@ class TransportBar(QWidget):
         self._unit_combo.addItem("Frames")  # index 1
         self._unit_combo.setToolTip("Show times as timecodes or frame numbers")
         self._unit_combo.currentIndexChanged.connect(self._on_unit_changed)
-        row.addWidget(self._unit_combo)
+        play_row.addWidget(self._unit_combo)
 
         self._time_label = QLabel("00:00:00.000 / 00:00:00.000")
         self._time_label.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont))
         self._time_label.setStyleSheet("color: #888;")
-        row.addWidget(self._time_label)
+        play_row.addWidget(self._time_label)
 
         self._goto_edit = QLineEdit()
         self._goto_edit.setPlaceholderText("Go to HH:MM:SS.mmm")
         self._goto_edit.setToolTip("Jump to a timecode")
-        # Take up the row's slack so there's plenty of room to type a timecode,
-        # and absorb the mark buttons' caption-growth. A small minimum lets the
-        # whole bar compress on narrow windows.
+        # Take up the row's slack so there's plenty of room to type a timecode; a
+        # small minimum lets the bar compress on narrow windows.
         self._goto_edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._goto_edit.setMinimumWidth(90)
         self._goto_edit.returnPressed.connect(self._on_goto)
-        row.addWidget(self._goto_edit, 1)
+        play_row.addWidget(self._goto_edit, 1)
 
         self._mute_btn = QToolButton()
         self._mute_btn.setCheckable(True)
@@ -185,28 +184,42 @@ class TransportBar(QWidget):
         self._mute_btn.setToolTip("Toggle audio")
         self._mute_btn.clicked.connect(self._toggle_mute)
         _pin_toggle_width(self._mute_btn, "🔇", "🔊")  # 🔇/🔊 differ in width too
-        row.addWidget(self._mute_btn)
+        play_row.addWidget(self._mute_btn)
+        outer.addLayout(play_row)
 
-        self._start_btn = QPushButton("Start")
+        # Row 3: trim marking on its own line, so the (pinned, caption-sized) mark
+        # buttons don't widen the whole transport — the bar's width is the *wider*
+        # of the two rows, not their sum, which keeps it small-screen friendly.
+        trim_row = QHBoxLayout()
+        trim_row.setContentsMargins(0, 0, 0, 0)
+        trim_row.setSpacing(6)
+        trim_row.addStretch(1)  # centre the trim buttons (matching stretch trails them)
+
+        self._start_btn = QPushButton("Trim start")
         self._start_btn.setToolTip("Capture the current frame as the trim start")
         self._start_btn.clicked.connect(self._mark_start)
-        self._end_btn = QPushButton("End")
+        self._end_btn = QPushButton("Trim end")
         self._end_btn.setToolTip("Capture the current frame as the trim end")
         self._end_btn.clicked.connect(self._mark_end)
-        # Let the mark buttons size to their text (compact until a value is
-        # captured) so the transport stays narrow enough for small screens.
-        # Their caption-growth is taken from the expanding "Go to" field to its
-        # left, so Add Trim doesn't shift.
+        # Pin to the widest state — a captured caption in either unit — so marking
+        # doesn't resize the button. The default "Trim start/end" label becomes
+        # "Start · <value>" once captured.
+        fm = self._start_btn.fontMetrics()
+        pin = max(
+            fm.horizontalAdvance(s)
+            for s in ("Trim start", "Start · 00:00:00.000", "Start · frame 9999999")
+        )
         for btn in (self._start_btn, self._end_btn):
-            row.addWidget(btn)
+            btn.setFixedWidth(pin + 20)
+            trim_row.addWidget(btn)
 
         self._trim_btn = QPushButton("Add Trim")
         self._trim_btn.setToolTip("Add this start–end range to the Trim list")
         self._trim_btn.setEnabled(False)
         self._trim_btn.clicked.connect(self._create_trim)
-        row.addWidget(self._trim_btn)
-
-        outer.addLayout(row)
+        trim_row.addWidget(self._trim_btn)
+        trim_row.addStretch(1)
+        outer.addLayout(trim_row)
 
     # --- trim marking -------------------------------------------------------
 
@@ -242,12 +255,14 @@ class TransportBar(QWidget):
 
     def _refresh_mark_captions(self) -> None:
         self._start_btn.setText(
-            "Start"
+            "Trim start"
             if self._start_frame is None
             else f"Start · {self._frame_caption(self._start_frame)}"
         )
         self._end_btn.setText(
-            "End" if self._end_frame is None else f"End · {self._frame_caption(self._end_frame)}"
+            "Trim end"
+            if self._end_frame is None
+            else f"End · {self._frame_caption(self._end_frame)}"
         )
 
     def _reject(self, button: QPushButton, message: str) -> None:

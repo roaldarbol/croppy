@@ -24,7 +24,6 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Croppy")
-        self._open_at_a_fitting_size()
 
         # App-wide border styling (GitHub-like), refreshed on a live theme switch.
         apply_app_theme()
@@ -58,6 +57,10 @@ class MainWindow(QMainWindow):
         # Match the queue's worker count to the persisted toggle state.
         self._apply_parallel(self.jobs_panel.parallel_enabled())
 
+        # Size the window only after the central widget exists, so the resize
+        # sticks on first show rather than falling back to the layout's size.
+        self._open_at_a_fitting_size()
+
     # --- public API ---------------------------------------------------------
 
     def open_path(self, path: Path) -> None:
@@ -86,18 +89,19 @@ class MainWindow(QMainWindow):
     def _open_at_a_fitting_size(self) -> None:
         """Open at a comfortable size, but never larger than the screen.
 
-        The preferred 1340×820 overflows a small laptop display (e.g. a 13"
-        MacBook at 1280×800), so clamp to the available area (minus a margin for
-        the menu bar / dock) and centre the window there.
+        ``availableGeometry`` already excludes the menu bar and dock, so on a
+        display with room we open at the full 1280×800 default (rather than
+        smaller just because the reduced minimum allows it); on a tighter display
+        we fill what's available. The window is then centred.
         """
-        preferred_w, preferred_h = 1340, 820
+        preferred_w, preferred_h = 1280, 800
         screen = self.screen() or QApplication.primaryScreen()
         if screen is None:
             self.resize(preferred_w, preferred_h)
             return
         available = screen.availableGeometry()
-        width = min(preferred_w, available.width() - 40)
-        height = min(preferred_h, available.height() - 40)
+        width = min(preferred_w, available.width())
+        height = min(preferred_h, available.height())
         self.resize(width, height)
         frame = self.frameGeometry()
         frame.moveCenter(available.center())

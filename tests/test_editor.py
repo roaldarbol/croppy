@@ -59,7 +59,7 @@ def test_transport_marks_create_a_trim(qtbot, qapp, test_video: Path) -> None:
     assert trims[0].end_frame >= 1
 
     # Marks reset after creating a trim.
-    assert transport._start_btn.text() == "Start"
+    assert transport._start_btn.text() == "Trim start"
     assert not transport._trim_btn.isEnabled()
 
 
