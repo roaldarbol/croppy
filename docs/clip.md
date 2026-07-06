@@ -11,18 +11,26 @@ a combination of an optional **crop** (a rectangle in space) and an optional
 
 Drop videos onto the canvas or use **Add video…** (you can select or drag in
 several at once). They collect in the left **Videos** list, and each open clip
-keeps its own crops, trims, encoding, output folder, and preview frame.
+keeps its own crops, trims, encoding, and output folder.
 
 - **Duplicate** reuses the selected clip's crops, trims, and settings — handy for
   trying a variation.
 - **Remove** drops the selected clip.
 
-## Pick a preview frame
+## Play and scrub
 
-The **Preview frame** box extracts any frame of the video so you can see what
-you're cropping (useful when a clip starts on black). Type a frame number and
-click **Reload**. On a long recording this seek is fast — it jumps straight to
-the frame rather than decoding from the start.
+The canvas is a **video player**. Use the transport bar beneath it to preview the
+clip and find the moments you care about:
+
+- **▶ / ⏸** plays and pauses.
+- The **timeline** scrubs — drag the handle, or click anywhere on the bar to jump
+  there. Seeking is fast even on a multi-hour recording; it doesn't decode from
+  the start.
+- **Go to `HH:MM:SS.mmm`** jumps to an exact time (or an exact frame number when
+  the unit is set to **Frames**).
+- The **🔇 / 🔊** toggle turns audio on or off (muted by default).
+- The **Timecode / Frames** dropdown switches whether times are shown as
+  timecodes or frame numbers — everywhere, including the Trim list.
 
 ## Draw crops
 
@@ -35,18 +43,23 @@ Each box becomes one output. With no crop at all, the whole frame is used.
 
 ## Set trims (time ranges)
 
-The **Trim** panel cuts the video in time. Type a **Start** and **End** as either
-a frame number or a timecode (`HH:MM:SS.mmm`) — switch the unit with the toggle —
-then click **Add trim**. A trim usually runs *to the end*, so the **⤓** button on
-the **End** field jumps to the last frame; the one on **Start** grabs whatever the
-preview is currently showing.
+Trims are marked straight from the player:
+
+1. Scrub to where the cut should **begin** and click **Start** — the button turns
+   green and shows the captured time.
+2. Scrub to where it should **end** and click **End** — it turns blue.
+3. Click **Add Trim** to add the range to the **Trim** panel.
+
+**Add Trim** stays disabled until both ends are marked, and Croppy won't let you
+put an End before its Start (or a Start after its End). The **Trim** panel lists
+every range you've added — select one and click **Remove** to drop it.
 
 With no trim, the whole timeline is used.
 
 !!! tip "Finding cut points"
-    Scrub the **Preview frame** to a moment, then use the **⤓** buttons to drop
-    that frame straight into Start or End — no separate scrubber needed, and it's
-    frame-accurate however long the video is.
+    Because the marks come from the playhead, the timeline *is* your scrubber —
+    play to a moment, hit **Start** or **End**, done. Switch the transport's unit
+    to **Frames** if you'd rather mark and read cut points as frame numbers.
 
 ## One output per crop × trim
 

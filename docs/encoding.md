@@ -52,6 +52,10 @@ The buttons at the top flip every row at once:
 
 - **Frame rate** — optionally resample to a lower fps (e.g. 60 → 10 keeps every
   6th frame). Off keeps the source rate.
+- **Speed** — play the output faster or slower, `0.1×`–`100×`: `2×` for double
+  speed, `0.5×` for slow motion, `100×` for a timelapse. Audio is dropped at any
+  non-`1×` speed. Pair it with **Frame rate** for a timelapse at a sane rate
+  (e.g. `100×` + `30fps`), rather than an enormous nominal frame rate.
 - **Re-encode audio** — on re-encodes audio to AAC at the chosen bitrate; off
   stream-copies the source audio untouched (fastest).
 - **Faststart** — moves the index to the front so an mp4/mov starts playing in a
