@@ -51,6 +51,15 @@ _START_ON = "QPushButton { background-color: #2e7d32; color: white; }"
 _END_ON = "QPushButton { background-color: #1565c0; color: white; }"
 
 
+def _pin_toggle_width(button: QToolButton, *texts: str) -> None:
+    """Fix ``button`` to its widest text so a glyph swap (▶/⏸, 🔇/🔊) can't
+    reflow the row. Leaves the button showing ``texts[0]``."""
+    widest = max(button.fontMetrics().horizontalAdvance(t) for t in texts)
+    button.setText(texts[0])
+    # Room for the glyph's widest state plus the tool button's own frame/padding.
+    button.setFixedWidth(widest + 16)
+
+
 class TransportBar(QWidget):
     """Play/scrub controls for the preview player, with trim-range marking."""
 
@@ -140,6 +149,9 @@ class TransportBar(QWidget):
         self._play_btn.setText("▶")
         self._play_btn.setToolTip("Play / pause")
         self._play_btn.clicked.connect(self._toggle_play)
+        # The ▶ and ⏸ glyphs differ in width; pin the button so toggling doesn't
+        # reflow the row (and nudge the canvas above it).
+        _pin_toggle_width(self._play_btn, "▶", "⏸")
         row.addWidget(self._play_btn)
 
         # Choose whether positions/marks read as timecodes or frame numbers —
@@ -170,6 +182,7 @@ class TransportBar(QWidget):
         self._mute_btn.setText("🔇")
         self._mute_btn.setToolTip("Toggle audio")
         self._mute_btn.clicked.connect(self._toggle_mute)
+        _pin_toggle_width(self._mute_btn, "🔇", "🔊")  # 🔇/🔊 differ in width too
         row.addWidget(self._mute_btn)
 
         self._start_btn = QPushButton("Start")
