@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
 )
 
 from croppy.ffmpeg.clip import clip_output_path, unique_output_path
-from croppy.ffmpeg.frame import extract_frame
+from croppy.ffmpeg.encoder import output_duration_seconds
 from croppy.ffmpeg.preview import probe_with_first_frame
 from croppy.ffmpeg.probe import VideoInfo, probe
 from croppy.gui.batch_dialog import BatchAddDialog
@@ -52,7 +52,6 @@ class ClipTab(QWidget):
     """Crop/trim several open videos; the selected one is shown in the editor."""
 
     video_ready = Signal(object)  # an editor finished loading its video (EditorWidget)
-    frame_reloaded = Signal(object)  # an editor finished reloading its preview frame
 
     def __init__(
         self,
@@ -182,7 +181,6 @@ class ClipTab(QWidget):
 
     def _register_editor(self, path: Path, editor: EditorWidget, at: int | None = None) -> None:
         editor.process_requested.connect(lambda e=editor: self._queue_editor(e))
-        editor.frame_change_requested.connect(lambda n, e=editor: self._reload(e, n))
         editor.videos_change_requested.connect(self.open_videos)  # drop more → open them
         editor.folder_dropped.connect(self._open_folder_batch)  # drop a folder → batch dialog
         self.stack.addWidget(editor)
@@ -219,28 +217,25 @@ class ClipTab(QWidget):
         if not (0 <= row < len(self._videos)):
             return
         src = self._videos[row]
-        frame = src.editor.frame_spin.value()
         # Snapshot the source's crops/settings/output now (no ffmpeg needed); they
-        # are applied once the duplicate's preview frame has loaded.
+        # are applied once the duplicate's video has loaded.
         crop_rects = [crop.crop_region() for crop in src.editor.canvas.crops()]
         trims = src.editor.trims()
         settings = src.editor.encode_settings()
         output_dir = src.editor.output_dir()
         output_name = src.editor.output_name()
         # The duplicate is the same file the source already probed — reuse its
-        # VideoInfo so we only re-open the file for the one frame we need.
+        # VideoInfo so we don't re-open the file just to re-probe it.
         src_info = src.editor.info()
 
         editor = EditorWidget(controller=self._controller)
         editor.show_loading(src.path.name)
         self._register_editor(src.path, editor, at=row + 1)
 
-        def done(result: tuple[VideoInfo, QImage]) -> None:
+        def done(info: VideoInfo) -> None:
             if self._video_for(editor) is None:
                 return
-            info, image = result
-            editor.load(info, image)
-            editor.frame_spin.setValue(frame)
+            editor.load(info)
             for r in crop_rects:
                 editor.canvas.add_crop(QRectF(r.x, r.y, r.w, r.h))
             for trim in trims:
@@ -255,11 +250,9 @@ class ClipTab(QWidget):
             logger.warning("Could not duplicate {}: {}", src.path, message)
             self._remove_editor(editor)
 
-        def work() -> tuple[VideoInfo, QImage]:
-            info = src_info or probe(src.path)
-            return info, extract_frame(src.path, frame_number=frame, fps=info.fps)
-
-        self._loader.submit(work, done, failed)
+        self._loader.submit(
+            (lambda: src_info) if src_info else (lambda: probe(src.path)), done, failed
+        )
 
     def _on_selected(self, row: int) -> None:
         if 0 <= row < len(self._videos):
@@ -294,33 +287,6 @@ class ClipTab(QWidget):
 
     def _video_for(self, editor: EditorWidget) -> _OpenVideo | None:
         return next((v for v in self._videos if v.editor is editor), None)
-
-    def _reload(self, editor: EditorWidget, frame_number: int) -> None:
-        video = self._video_for(editor)
-        if video is None:
-            return
-        info = editor.info()
-        fps = info.fps if info is not None else None
-        editor.reload_btn.setEnabled(False)
-
-        def done(image: QImage) -> None:
-            if self._video_for(editor) is None:
-                return
-            editor.set_image(image)
-            editor.reload_btn.setEnabled(True)
-            self.frame_reloaded.emit(editor)
-
-        def failed(message: str) -> None:
-            logger.warning("Reload frame {} failed: {}", frame_number, message)
-            if self._video_for(editor) is not None:
-                editor.reload_btn.setEnabled(True)
-            QMessageBox.warning(
-                self, "Croppy", f"Could not extract frame {frame_number}:<br><br>{message}"
-            )
-
-        self._loader.submit(
-            lambda: extract_frame(video.path, frame_number=frame_number, fps=fps), done, failed
-        )
 
     def _queue_editor(self, editor: EditorWidget) -> None:
         video = self._video_for(editor)
@@ -373,7 +339,7 @@ class ClipTab(QWidget):
                     duration = trim_secs[1]
                 job = ClipJob(
                     output_path=output_path,
-                    duration_seconds=duration,
+                    duration_seconds=output_duration_seconds(settings, duration),
                     input_path=video.path,
                     region=region,
                     settings=settings,

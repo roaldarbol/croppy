@@ -46,10 +46,7 @@ def test_sidebar_right_buttons_visible_at_minimum_width(qtbot, qapp) -> None:
     viewport_right = scroll.viewport().mapToGlobal(scroll.viewport().rect().topRight()).x()
 
     # The right-hand buttons most prone to clipping must sit inside the viewport.
-    for name, widget in (
-        ("Add trim", editor.trim._add_btn),
-        ("Reload", editor.reload_btn),
-    ):
+    for name, widget in (("Remove", editor.trim._remove_btn),):
         right = widget.mapToGlobal(widget.rect().topRight()).x()
         assert right <= viewport_right, f"{name} button is clipped on the right"
 

@@ -97,6 +97,7 @@ APPLY_KEYS: tuple[str, ...] = (
     "preset",
     "pixel_format",
     "fps",
+    "speed",
     "audio",
 )
 DEFAULT_APPLIED: frozenset[str] = frozenset(
@@ -145,6 +146,11 @@ class EncodeSettings:
     # is in ``applied`` (and > 0). Because ``fps`` is a CPU-side filter, an active
     # value forces the CPU decode path, the same way crop's ``-vf`` does.
     fps: float = 0.0
+    # Playback-speed multiplier, applied as a ``setpts`` filter only when "speed"
+    # is in ``applied`` (and not 1.0). >1 speeds up, <1 slows down. Audio is
+    # dropped at any non-1 speed (setpts retimes video only). Like ``fps`` it is a
+    # CPU-side filter, so an active value forces the CPU decode path.
+    speed: float = 1.0
     # Audio: re-encode to AAC at this bitrate when "audio" is in ``applied``,
     # otherwise stream-copy the source audio.
     audio_bitrate: str = "192k"

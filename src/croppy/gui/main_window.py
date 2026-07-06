@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtWidgets import QMainWindow, QTabWidget
+from PySide6.QtWidgets import QApplication, QMainWindow, QTabWidget
 
 from croppy.config import load_parallel_enabled, save_parallel_enabled
 from croppy.gui.clip_tab import ClipTab
@@ -24,7 +24,6 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Croppy")
-        self.resize(1340, 820)
 
         # App-wide border styling (GitHub-like), refreshed on a live theme switch.
         apply_app_theme()
@@ -82,6 +81,32 @@ class MainWindow(QMainWindow):
         super().closeEvent(event)
 
     # --- internals ----------------------------------------------------------
+
+    def show_fitting(self) -> None:
+        """Show the window, sized to the display.
+
+        On a display with room for the 1440×900 default, open *windowed* at that
+        size, centred. On a smaller screen (a laptop that can't fit it), open
+        *maximised* to fill the available area — restoring to a fitted size when
+        un-maximised. ``availableGeometry`` already excludes the menu bar / dock.
+        """
+        default_w, default_h = 1440, 900
+        screen = self.screen() or QApplication.primaryScreen()
+        if screen is None:
+            self.resize(default_w, default_h)
+            self.show()
+            return
+        available = screen.availableGeometry()
+        fits = available.width() >= default_w and available.height() >= default_h
+        # This is the windowed size (and the restore size when maximised).
+        self.resize(min(default_w, available.width()), min(default_h, available.height()))
+        frame = self.frameGeometry()
+        frame.moveCenter(available.center())
+        self.move(frame.topLeft())
+        if fits:
+            self.show()
+        else:
+            self.showMaximized()
 
     def _on_parallel_toggled(self, enabled: bool) -> None:
         save_parallel_enabled(enabled)

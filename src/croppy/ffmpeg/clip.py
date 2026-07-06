@@ -11,7 +11,14 @@ import re
 from pathlib import Path
 
 from croppy.ffmpeg.binary import find_ffmpeg
-from croppy.ffmpeg.encoder import audio_args, encoder_args, faststart_args, fps_filter
+from croppy.ffmpeg.encoder import (
+    audio_args,
+    encoder_args,
+    faststart_args,
+    fps_filter,
+    output_duration_seconds,
+    speed_filter,
+)
 from croppy.models import CropRegion, EncodeSettings
 
 
@@ -30,7 +37,11 @@ def build_clip_command(
       ``crop=`` video filter. ``None`` keeps the full frame (no crop filter).
     * ``trim`` — a ``(start_seconds, duration_seconds)`` pair applied as an
       *input* ``-ss`` (fast keyframe seek, cheap even deep into a long file)
-      plus an output ``-t``. ``None`` keeps the whole timeline.
+      plus an output ``-t``. The ``-t`` bounds the **output** timeline, so under
+      a speed change it is scaled by :func:`output_duration_seconds` (e.g. a
+      922.8s trim at 100× stops after 9.228s of output — i.e. once the 922.8s of
+      source is read — instead of decoding the whole file). ``None`` keeps the
+      whole timeline.
 
     Video flags come from :func:`croppy.ffmpeg.encoder.encoder_args`; the GPU
     decode pipeline is *not* used here because ``-vf`` filters (and CPU-side
@@ -43,13 +54,22 @@ def build_clip_command(
     if region is not None:
         r = region.snapped
         filters.append(f"crop={r.w}:{r.h}:{r.x}:{r.y}")
+    # setpts (speed) must precede fps so a resample runs on the retimed stream.
+    speed = speed_filter(settings)
+    if speed:
+        filters.append(speed)
     fps = fps_filter(settings)
     if fps:
         filters.append(fps)
 
-    # Input -ss seeks before decoding (fast); output -t bounds the duration.
+    # Input -ss seeks before decoding (fast); output -t bounds the *output*
+    # duration, which a speed change compresses — so scale it to the output
+    # timeline, else -t (in source seconds) never triggers and ffmpeg decodes
+    # far past the trim.
     seek_args = ["-ss", f"{trim[0]:.6f}"] if trim is not None else []
-    duration_args = ["-t", f"{trim[1]:.6f}"] if trim is not None else []
+    duration_args = (
+        ["-t", f"{output_duration_seconds(settings, trim[1]):.6f}"] if trim is not None else []
+    )
     vf_args = ["-vf", ",".join(filters)] if filters else []
 
     return [

@@ -7,8 +7,21 @@ from types import SimpleNamespace
 
 import croppy.ffmpeg.encoder as enc
 from croppy.ffmpeg.clip import build_clip_command
-from croppy.ffmpeg.encoder import encoder_args, resolve_encoder
-from croppy.models import CropRegion, EncodeSettings
+from croppy.ffmpeg.combine import build_combine_command
+from croppy.ffmpeg.compress import build_compress_command
+from croppy.ffmpeg.encoder import (
+    audio_args,
+    encoder_args,
+    output_duration_seconds,
+    resolve_encoder,
+    speed_filter,
+)
+from croppy.models import DEFAULT_APPLIED, CropRegion, EncodeSettings
+
+
+def _with_speed(factor: float) -> EncodeSettings:
+    """An EncodeSettings with a ``speed`` override applied."""
+    return EncodeSettings(speed=factor, applied=DEFAULT_APPLIED | {"speed"})
 
 
 def _fake_run(*, listed: bool, encode_ok: bool):
@@ -85,6 +98,88 @@ def test_encoder_args_cpu(monkeypatch) -> None:
     assert output_args[output_args.index("-crf") + 1] == "26"
     assert output_args[output_args.index("-preset") + 1] == "medium"
     assert output_args[output_args.index("-pix_fmt") + 1] == "yuv420p"
+
+
+# --- speed (setpts) -----------------------------------------------------------
+
+
+def test_speed_filter_only_when_applied_and_changed() -> None:
+    assert speed_filter(EncodeSettings(speed=2.0)) is None  # value set but not applied
+    assert speed_filter(_with_speed(1.0)) is None  # applied but no actual change
+    assert speed_filter(_with_speed(0.0)) is None  # non-positive is ignored
+
+
+def test_speed_filter_renders_setpts() -> None:
+    assert speed_filter(_with_speed(100)) == "setpts=PTS/100"
+    assert speed_filter(_with_speed(2.0)) == "setpts=PTS/2"  # tidy integer form
+    assert speed_filter(_with_speed(0.1)) == "setpts=PTS/0.1"
+
+
+def test_speed_drops_audio() -> None:
+    assert audio_args(_with_speed(2.0)) == ["-an"]
+    # A non-1 speed drops audio even if "audio" re-encode is also applied.
+    both = EncodeSettings(speed=2.0, applied=DEFAULT_APPLIED | {"speed", "audio"})
+    assert audio_args(both) == ["-an"]
+    # No speed change → normal audio handling (default = stream copy).
+    assert audio_args(EncodeSettings()) == ["-c:a", "copy"]
+
+
+def test_output_duration_scales_by_speed() -> None:
+    assert output_duration_seconds(_with_speed(100), 600.0) == 6.0
+    assert output_duration_seconds(_with_speed(0.5), 10.0) == 20.0
+    assert output_duration_seconds(EncodeSettings(), 10.0) == 10.0  # off → unchanged
+
+
+def test_clip_command_puts_setpts_before_fps_and_drops_audio(monkeypatch) -> None:
+    monkeypatch.setattr(enc, "nvenc_available", lambda: False)
+    settings = EncodeSettings(speed=100, fps=30, applied=DEFAULT_APPLIED | {"speed", "fps"})
+    cmd = build_clip_command(Path("in.mp4"), Path("out.mp4"), region=None, settings=settings)
+    # setpts must precede fps so the resample runs on the retimed stream.
+    assert cmd[cmd.index("-vf") + 1] == "setpts=PTS/100,fps=30"
+    assert "-an" in cmd
+    assert "-c:a" not in cmd  # audio dropped rather than copied
+
+
+def test_compress_command_speed_forces_cpu_decode_and_drops_audio(monkeypatch) -> None:
+    monkeypatch.setattr(enc, "nvenc_available", lambda: True)
+    cmd = build_compress_command(Path("in.mp4"), Path("out.mp4"), _with_speed(4))
+    assert cmd[cmd.index("-vf") + 1] == "setpts=PTS/4"
+    assert "-hwaccel_output_format" not in cmd  # the CPU filter disables GPU decode
+    assert "-an" in cmd
+
+
+def test_combine_command_includes_setpts(monkeypatch) -> None:
+    monkeypatch.setattr(enc, "nvenc_available", lambda: False)
+    cmd = build_combine_command(Path("list.txt"), Path("out.partial.mp4"), _with_speed(8))
+    assert cmd[cmd.index("-vf") + 1] == "setpts=PTS/8"
+    assert "-an" in cmd
+
+
+# --- HEVC hvc1 tagging --------------------------------------------------------
+
+
+def test_hevc_in_mp4_mov_is_tagged_hvc1() -> None:
+    from croppy.ffmpeg.encoder import hevc_tag_args
+
+    # HEVC (explicit, so no nvenc probe) in an isobmff container → hvc1.
+    assert hevc_tag_args(EncodeSettings(encoder="libx265", container="mp4")) == ["-tag:v", "hvc1"]
+    assert hevc_tag_args(EncodeSettings(encoder="libx265", container="mov")) == ["-tag:v", "hvc1"]
+    # H.264 keeps the muxer default (avc1); mkv needs no fourcc tag.
+    assert hevc_tag_args(EncodeSettings(encoder="libx264", container="mp4")) == []
+    assert hevc_tag_args(EncodeSettings(encoder="libx265", container="mkv")) == []
+
+
+def test_encoder_args_appends_hvc1_for_hevc(monkeypatch) -> None:
+    monkeypatch.setattr(enc, "nvenc_available", lambda: False)  # auto → libx265
+    _, out = encoder_args(
+        EncodeSettings(encoder="auto", container="mp4"), allow_hwaccel_decode=False
+    )
+    assert out[out.index("-tag:v") + 1] == "hvc1"
+    # NVENC HEVC is tagged too.
+    _, out = encoder_args(
+        EncodeSettings(encoder="nvenc_hevc", container="mp4"), allow_hwaccel_decode=False
+    )
+    assert out[out.index("-tag:v") + 1] == "hvc1"
 
 
 def test_crop_omits_hwaccel_output_format_even_with_nvenc(monkeypatch) -> None:

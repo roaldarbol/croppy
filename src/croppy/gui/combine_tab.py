@@ -16,12 +16,14 @@ from loguru import logger
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QListWidget,
     QListWidgetItem,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSplitter,
     QStackedWidget,
     QVBoxLayout,
@@ -29,6 +31,7 @@ from PySide6.QtWidgets import (
 )
 
 from croppy.ffmpeg.clip import safe_stem, unique_output_path
+from croppy.ffmpeg.encoder import output_duration_seconds
 from croppy.ffmpeg.probe import ProbeError, probe
 from croppy.gui.compression_panel import CompressionController, CompressionPanel
 from croppy.gui.constants import (
@@ -118,9 +121,24 @@ class CombineTab(QWidget):
         side = QWidget(splitter)
         self._side = side
         side.setMinimumWidth(280)
-        v = QVBoxLayout(side)
-        v.setContentsMargins(PANEL_MARGIN, PANEL_HEADER_HEIGHT, PANEL_MARGIN, PANEL_MARGIN)
+        # Scroll the controls (queue button pinned below) so the tall encoding
+        # form never forces the window past a small screen's height.
+        outer = QVBoxLayout(side)
+        outer.setContentsMargins(PANEL_MARGIN, PANEL_HEADER_HEIGHT, PANEL_MARGIN, PANEL_MARGIN)
+        outer.setSpacing(12)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.viewport().setAutoFillBackground(False)
+        outer.addWidget(scroll, 1)
+        gutter = scroll.verticalScrollBar().sizeHint().width() or 16
+        controls = QWidget()
+        controls.setAutoFillBackground(False)
+        v = QVBoxLayout(controls)
+        v.setContentsMargins(0, 0, gutter, 0)
         v.setSpacing(12)
+        scroll.setWidget(controls)
         hint = QLabel(
             "Each group is one join. Add two or more videos and drag to set the "
             "order; they are joined top-to-bottom into one file. The group name "
@@ -148,10 +166,15 @@ class CombineTab(QWidget):
         self.queue_btn = QPushButton("Add Job to Queue")
         self.queue_btn.setEnabled(False)
         self.queue_btn.clicked.connect(self._queue_current)
-        v.addWidget(self.queue_btn)
+        outer.addWidget(self.queue_btn)
 
         self.queued_flash = StatusFlash()
-        v.addWidget(self.queued_flash)
+        outer.addWidget(self.queued_flash)
+
+        # Reserve enough width for the controls + scrollbar gutter so the panel
+        # never needs to scroll horizontally (mirroring the Clip editor).
+        needed = controls.minimumSizeHint().width() + gutter + 2 * PANEL_MARGIN
+        side.setMinimumWidth(max(280, needed))
 
         splitter.addWidget(groups_panel)
         splitter.addWidget(self.stack)
@@ -311,7 +334,7 @@ class CombineTab(QWidget):
             settings = group.settings
         job = CombineJob(
             output_path=output_path,
-            duration_seconds=_total_duration(paths),
+            duration_seconds=output_duration_seconds(settings, _total_duration(paths)),
             inputs=paths,
             settings=settings,
         )

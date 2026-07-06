@@ -29,19 +29,70 @@ def test_editor_constructs_with_summary(qtbot, qapp, test_video: Path) -> None:
     qtbot.addWidget(editor)
     assert editor.info() == info
     assert editor.canvas.image_size() == (320, 240)
-    assert editor.frame_spin.value() == 1
-    assert editor.frame_spin.maximum() >= 60
+    assert editor.transport.isEnabled()
+    assert editor.transport.current_frame() == 1
 
 
-def test_editor_reload_emits_frame_change(qtbot, qapp, test_video: Path) -> None:
+def test_transport_marks_create_a_trim(qtbot, qapp, test_video: Path) -> None:
     info = probe(test_video)
-    image = extract_frame(test_video, 1)
-    editor = EditorWidget(info, image)
+    editor = EditorWidget(info, extract_frame(test_video, 1))
     qtbot.addWidget(editor)
-    editor.frame_spin.setValue(15)
-    with qtbot.waitSignal(editor.frame_change_requested, timeout=500) as blocker:
-        editor.reload_btn.click()
-    assert blocker.args == [15]
+    transport = editor.transport
+
+    # Trim stays disabled until both ends are marked.
+    assert not transport._trim_btn.isEnabled()
+    transport._mark_start()  # playhead sits on frame 1 at a fresh position
+    assert transport._start_frame == 1
+    assert not transport._trim_btn.isEnabled()
+
+    # Simulate the playhead advancing, then mark the end.
+    transport._player.setPosition(1000)  # ~1s → frame 31 at 30 fps
+    transport._mark_end()
+    assert transport._end_frame == transport.current_frame()
+    assert transport._trim_btn.isEnabled()
+
+    with qtbot.waitSignal(editor.trim.trims_changed, timeout=500):
+        transport._trim_btn.click()
+    trims = editor.trims()
+    assert len(trims) == 1
+    assert trims[0].start_frame == 1
+    assert trims[0].end_frame >= 1
+
+    # Marks reset after creating a trim.
+    assert transport._start_btn.text() == "Trim start"
+    assert not transport._trim_btn.isEnabled()
+
+
+def test_marks_are_order_guarded(qtbot, qapp, test_video: Path) -> None:
+    info = probe(test_video)
+    editor = EditorWidget(info, extract_frame(test_video, 1))
+    qtbot.addWidget(editor)
+    t = editor.transport
+
+    # An End before an existing Start is rejected.
+    t.current_frame = lambda: 50
+    t._mark_start()
+    assert t._start_frame == 50
+    t.current_frame = lambda: 10
+    t._mark_end()
+    assert t._end_frame is None
+    assert not t._trim_btn.isEnabled()
+
+    # Mirror: a Start after an existing End is rejected too.
+    t._reset_marks()
+    t.current_frame = lambda: 5
+    t._mark_end()
+    t.current_frame = lambda: 40
+    t._mark_start()
+    assert t._start_frame is None
+    assert not t._trim_btn.isEnabled()
+
+    # A valid start ≤ end enables Add Trim.
+    t.current_frame = lambda: 5
+    t._mark_start()
+    t.current_frame = lambda: 40
+    t._mark_end()
+    assert t._trim_btn.isEnabled()
 
 
 def test_editor_set_image_swaps_pixmap(qtbot, qapp, test_video: Path) -> None:
@@ -54,13 +105,53 @@ def test_editor_set_image_swaps_pixmap(qtbot, qapp, test_video: Path) -> None:
     assert editor.canvas.image_size() == (320, 240)
 
 
+def _key_press(key, mods=Qt.KeyboardModifier.NoModifier):
+    from PySide6.QtCore import QEvent
+    from PySide6.QtGui import QKeyEvent
+
+    return QKeyEvent(QEvent.Type.KeyPress, key, mods)
+
+
+def test_canvas_space_and_arrows_emit_playback_signals(qtbot, qapp, test_video: Path) -> None:
+    canvas = VideoCanvas()
+    qtbot.addWidget(canvas)
+    canvas.attach_video(test_video, 320, 240)  # a video must be attached for the keys to act
+
+    with qtbot.waitSignal(canvas.play_pause_requested, timeout=500):
+        canvas.keyPressEvent(_key_press(Qt.Key.Key_Space))
+
+    with qtbot.waitSignal(canvas.step_requested, timeout=500) as fwd:
+        canvas.keyPressEvent(_key_press(Qt.Key.Key_Right))
+    assert fwd.args == [1]
+
+    with qtbot.waitSignal(canvas.step_requested, timeout=500) as back:
+        canvas.keyPressEvent(_key_press(Qt.Key.Key_Left))
+    assert back.args == [-1]
+
+    with qtbot.waitSignal(canvas.step_requested, timeout=500) as coarse:
+        canvas.keyPressEvent(_key_press(Qt.Key.Key_Right, Qt.KeyboardModifier.ShiftModifier))
+    assert coarse.args == [10]
+
+
+def test_canvas_playback_keys_inert_without_video(qtbot, qapp) -> None:
+    # With no video attached the keys must fall through (no player to drive).
+    canvas = VideoCanvas()
+    qtbot.addWidget(canvas)
+    fired: list[object] = []
+    canvas.play_pause_requested.connect(lambda: fired.append("play"))
+    canvas.step_requested.connect(fired.append)
+    canvas.keyPressEvent(_key_press(Qt.Key.Key_Space))
+    canvas.keyPressEvent(_key_press(Qt.Key.Key_Right))
+    assert fired == []
+
+
 def test_editor_starts_empty(qtbot, qapp) -> None:
     editor = EditorWidget()
     qtbot.addWidget(editor)
     assert editor.info() is None
     assert not editor.canvas.has_image()
     assert not editor.process_btn.isEnabled()
-    assert not editor.frame_spin.isEnabled()
+    assert not editor.transport.isEnabled()
     assert editor.crop_regions() == []
 
 
@@ -72,8 +163,7 @@ def test_editor_load_enables_controls(qtbot, qapp, test_video: Path) -> None:
     editor.load(info, image)
     assert editor.info() == info
     assert editor.canvas.has_image()
-    assert editor.frame_spin.isEnabled()
-    assert editor.reload_btn.isEnabled()
+    assert editor.transport.isEnabled()
 
 
 def test_load_new_video_clears_crops_and_resets_compression(qtbot, qapp, test_video: Path) -> None:

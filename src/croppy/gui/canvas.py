@@ -1,16 +1,23 @@
-"""The video preview canvas — QGraphicsView showing a single video frame.
+"""The video preview canvas — QGraphicsView showing a live video (or a still frame).
 
 Also owns the collection of :class:`CropRectItem` boxes drawn on the frame.
 Empty-area click-drag creates a new crop; clicking on a crop selects it
 (with its handles); Delete/Backspace removes the selected crops.
+
+The canvas can display a still image (:meth:`set_image`, used as an instant
+"poster" while a clip loads) and/or a live :class:`QMediaPlayer` output
+(:meth:`attach_video`). The crop rectangles overlay whichever is shown, since
+they all live in the same scene at source-pixel coordinates.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, Signal
+from PySide6.QtCore import QPoint, QPointF, QRectF, QSizeF, Qt, QUrl, Signal
 from PySide6.QtGui import QBrush, QColor, QImage, QPainter, QPen, QPixmap
+from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
+from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
 from PySide6.QtWidgets import (
     QFrame,
     QGraphicsItem,
@@ -28,6 +35,8 @@ from croppy.gui.theme import primary_surface, watch_app_palette
 
 _DRAFT_MIN_SIDE = 6.0
 _DRAFT_BORDER = QColor("#ffaa00")
+# Coarse Shift+arrow step, in frames (plain arrows step one frame).
+_SHIFT_STEP_FRAMES = 10
 
 
 class VideoCanvas(QGraphicsView):
@@ -36,6 +45,8 @@ class VideoCanvas(QGraphicsView):
     videos_dropped = Signal(list)  # video files (list[Path]) dropped / chosen here
     folder_dropped = Signal(Path)  # a single folder dropped (opens the batch dialog)
     browse_requested = Signal()  # empty canvas clicked
+    play_pause_requested = Signal()  # Space over the video
+    step_requested = Signal(int)  # frames to step the playhead (±; arrow keys)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -60,6 +71,14 @@ class VideoCanvas(QGraphicsView):
         self._draft: QGraphicsRectItem | None = None
         self._draft_origin: QPointF | None = None
 
+        # Live-video output (created lazily in attach_video). The video item is
+        # kept hidden until its first frame arrives (nativeSizeChanged) so the
+        # poster pixmap underneath shows instead of a black rectangle while the
+        # media loads — important for large / networked clips.
+        self._player: QMediaPlayer | None = None
+        self._audio: QAudioOutput | None = None
+        self._video_item: QGraphicsVideoItem | None = None
+
         # Centered logo + prompt shown until a video is loaded.
         self._placeholder = DropHint(
             "Drop a video or folder here\nor click to browse", self.viewport()
@@ -71,21 +90,72 @@ class VideoCanvas(QGraphicsView):
     # --- public API ---------------------------------------------------------
 
     def has_image(self) -> bool:
-        return self._pixmap_item is not None
+        return self._pixmap_item is not None or self._video_item is not None
 
     def set_image(self, image: QImage) -> None:
+        """Show a still frame — used as an instant poster before the player loads."""
         pixmap = QPixmap.fromImage(image)
         if self._pixmap_item is None:
             self._pixmap_item = self._scene.addPixmap(pixmap)
-            self._pixmap_item.setZValue(-1)
+            # Behind the live-video item (-1); both sit under the crops (default 0).
+            self._pixmap_item.setZValue(-2)
         else:
             self._pixmap_item.setPixmap(pixmap)
-        self._scene.setSceneRect(QRectF(0, 0, image.width(), image.height()))
+        if self._video_item is None:
+            self._scene.setSceneRect(QRectF(0, 0, image.width(), image.height()))
         self._placeholder.hide()
         self._position_overlays()
         self._fit()
 
+    def player(self) -> QMediaPlayer | None:
+        return self._player
+
+    def attach_video(self, path: Path | str, width: int, height: int) -> QMediaPlayer:
+        """Play ``path`` in the canvas, sizing its output to the source frame.
+
+        Crops are declared in source-pixel coordinates, so the video item is
+        sized to ``width×height`` (matching the scene rect and the poster). The
+        returned player is owned by the canvas and reused across clips.
+        """
+        if self._player is None:
+            self._player = QMediaPlayer(self)
+            self._audio = QAudioOutput(self._player)
+            # Muted by default: scrubbing a clip shouldn't blast audio; a mute
+            # toggle in the transport bar lets the user turn it on to find a cut.
+            self._audio.setMuted(True)
+            self._player.setAudioOutput(self._audio)
+            self._video_item = QGraphicsVideoItem()
+            self._video_item.setZValue(-1)
+            self._scene.addItem(self._video_item)
+            self._player.setVideoOutput(self._video_item)
+            # Reveal the video only once it has a real frame, hiding the poster.
+            self._video_item.nativeSizeChanged.connect(self._on_native_size)
+
+        self._video_item.setVisible(False)
+        self._video_item.setSize(QSizeF(width, height))
+        self._scene.setSceneRect(QRectF(0, 0, width, height))
+        self._placeholder.hide()
+        self._player.setSource(QUrl.fromLocalFile(str(path)))
+        # Preroll: play then immediately pause so a paused first frame is shown
+        # (the ffmpeg backend won't decode a frame from the Stopped state).
+        self._player.play()
+        self._player.pause()
+        self._position_overlays()
+        self._fit()
+        return self._player
+
+    def _on_native_size(self, size: QSizeF) -> None:
+        if self._video_item is None or size.isEmpty():
+            return
+        self._video_item.setVisible(True)
+        if self._pixmap_item is not None:
+            self._pixmap_item.hide()
+        self._fit()
+
     def image_size(self) -> tuple[int, int]:
+        if self._video_item is not None:
+            size = self._video_item.size()
+            return (int(size.width()), int(size.height()))
         if self._pixmap_item is None:
             return (0, 0)
         pm = self._pixmap_item.pixmap()
@@ -210,13 +280,29 @@ class VideoCanvas(QGraphicsView):
         super().mouseReleaseEvent(event)
 
     def keyPressEvent(self, event) -> None:
-        if event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+        key = event.key()
+        if key in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
             removed_any = False
             for it in list(self._scene.selectedItems()):
                 if isinstance(it, CropRectItem):
                     self.remove_crop(it)
                     removed_any = True
             if removed_any:
+                event.accept()
+                return
+        # Playback shortcuts, only while a video is attached: Space plays/pauses,
+        # ←/→ step a frame (Shift for a coarser jump). The editor forwards these
+        # to the transport bar.
+        if self._video_item is not None:
+            if key == Qt.Key.Key_Space:
+                self.play_pause_requested.emit()
+                event.accept()
+                return
+            if key in (Qt.Key.Key_Left, Qt.Key.Key_Right):
+                step = 1 if key == Qt.Key.Key_Right else -1
+                if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+                    step *= _SHIFT_STEP_FRAMES
+                self.step_requested.emit(step)
                 event.accept()
                 return
         super().keyPressEvent(event)
@@ -227,9 +313,12 @@ class VideoCanvas(QGraphicsView):
         self.setBackgroundBrush(QBrush(primary_surface()))
 
     def _fit(self) -> None:
-        if self._pixmap_item is None:
+        # Prefer the live-video item once present; fall back to the poster. Both
+        # share the scene rect, so either fits the same source-pixel area.
+        item = self._video_item if self._video_item is not None else self._pixmap_item
+        if item is None:
             return
-        self.fitInView(self._pixmap_item, Qt.AspectRatioMode.KeepAspectRatio)
+        self.fitInView(item, Qt.AspectRatioMode.KeepAspectRatio)
 
     def _position_overlays(self) -> None:
         self._placeholder.setGeometry(self.viewport().rect())

@@ -15,6 +15,10 @@ from croppy.ffmpeg.binary import find_ffmpeg
 from croppy.models import EncodeSettings
 
 _FASTSTART_CONTAINERS = frozenset({"mp4", "mov"})
+# Encoders whose output is HEVC, and the isobmff containers where HEVC must be
+# tagged ``hvc1`` (see hevc_tag_args).
+_HEVC_ENCODERS = frozenset({"nvenc_hevc", "libx265"})
+_HVC1_CONTAINERS = frozenset({"mp4", "mov"})
 
 
 @lru_cache(maxsize=1)
@@ -118,7 +122,25 @@ def encoder_args(
         if settings.is_on("pixel_format"):
             output_args += ["-pix_fmt", settings.pixel_format]
 
+    output_args += hevc_tag_args(settings)
     return input_args, output_args
+
+
+def hevc_tag_args(settings: EncodeSettings) -> list[str]:
+    """``-tag:v hvc1`` for HEVC output in an mp4/mov container, else ``[]``.
+
+    The mp4/mov muxer tags HEVC ``hev1`` by default, which keeps the codec
+    parameter sets *in-band* (in the frames) rather than in the ``moov`` header.
+    Apple/Microsoft software (QuickTime, Finder previews, PowerPoint) reads only
+    the header, so with ``hev1`` it misses the SPS — including the conformance
+    crop window an encoder writes when it pads dimensions (e.g. NVENC padding a
+    2160-high frame to a coded 2176). It then renders the padded, slightly-wrong
+    aspect, showing the video a little narrower. Tagging ``hvc1`` (parameter sets
+    in ``moov``, matching what cameras write) fixes playback and geometry there.
+    """
+    if resolve_encoder(settings) in _HEVC_ENCODERS and settings.container in _HVC1_CONTAINERS:
+        return ["-tag:v", "hvc1"]
+    return []
 
 
 def fps_filter(settings: EncodeSettings) -> str | None:
@@ -142,8 +164,46 @@ def fps_filter(settings: EncodeSettings) -> str | None:
     return f"fps={text}"
 
 
+def speed_filter(settings: EncodeSettings) -> str | None:
+    """Return the ``setpts=`` video filter for a speed change, else ``None``.
+
+    ``EncodeSettings.speed`` retimes video by rescaling presentation timestamps:
+    ``setpts=PTS/N`` runs the clip N× faster (N>1) or slower (N<1) — so 100 gives
+    a ×100 timelapse and 0.1 a ×10 slow-motion. Returned only when "speed" is
+    applied and the factor is a real change (positive and not 1.0). It selects no
+    frames itself, so pairing it with :func:`fps_filter` (which must come *after*
+    it) resamples the retimed stream to a sane output rate.
+
+    Like ``fps`` this is a CPU-side filter, so callers that apply it must decode
+    on the CPU (``allow_hwaccel_decode=False``).
+    """
+    if not settings.is_on("speed") or settings.speed <= 0 or settings.speed == 1:
+        return None
+    value = settings.speed
+    text = str(int(value)) if float(value).is_integer() else str(value)
+    return f"setpts=PTS/{text}"
+
+
+def output_duration_seconds(settings: EncodeSettings, source_seconds: float) -> float:
+    """Scale a source duration to the encoded output's length for a speed change.
+
+    A ×N speed makes the output ``source_seconds / N`` long, so progress bars key
+    off this rather than the source duration. With no active speed it is a no-op.
+    """
+    if speed_filter(settings) is None:
+        return source_seconds
+    return source_seconds / settings.speed
+
+
 def audio_args(settings: EncodeSettings) -> list[str]:
-    """``-c:a`` flags: re-encode to AAC when "audio" is applied, else stream-copy."""
+    """``-c:a`` flags for the output.
+
+    A non-1 speed drops audio entirely (``-an``): ``setpts`` retimes only video,
+    so keeping the source audio would desync. Otherwise re-encode to AAC when
+    "audio" is applied, else stream-copy the source track.
+    """
+    if speed_filter(settings) is not None:
+        return ["-an"]
     if settings.is_on("audio"):
         return ["-c:a", "aac", "-b:a", settings.audio_bitrate]
     return ["-c:a", "copy"]
