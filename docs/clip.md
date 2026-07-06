@@ -32,6 +32,11 @@ clip and find the moments you care about:
 - The **Timecode / Frames** dropdown switches whether times are shown as
   timecodes or frame numbers — everywhere, including the Trim list.
 
+!!! tip "Keyboard shortcuts"
+    With the video focused (click it once), **Space** plays/pauses and **←/→**
+    step one frame back/forward — hold **Shift** for a coarser jump. Handy for
+    landing exactly on a cut point before hitting **Start** or **End**.
+
 ## Draw crops
 
 - **Click-and-drag** on the frame to draw a crop box.

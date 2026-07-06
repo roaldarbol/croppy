@@ -108,6 +108,8 @@ class EditorWidget(QWidget):
         # Trims belong to the old clip too — rebind the panel to this one.
         self.trim.configure(info.fps, info.nb_frames)
         self._refresh_crops()
+        # Focus the canvas so the playback shortcuts (Space / arrows) work at once.
+        self.canvas.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def set_image(self, image: QImage) -> None:
         self.canvas.set_image(image)
@@ -170,6 +172,9 @@ class EditorWidget(QWidget):
         self.transport.trim_created.connect(self._add_trim)
         # One unit toggle in the navigator drives the Trim list's format too.
         self.transport.display_mode_changed.connect(self.trim.set_display_frames)
+        # Keyboard shortcuts over the video (Space / arrows) reach the transport.
+        self.canvas.play_pause_requested.connect(self.transport.toggle_play)
+        self.canvas.step_requested.connect(self.transport.step_frames)
         cw.addWidget(self.transport)
         splitter.addWidget(canvas_wrap)
         splitter.addWidget(sidebar)

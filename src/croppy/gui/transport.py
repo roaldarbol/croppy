@@ -100,6 +100,22 @@ class TransportBar(QWidget):
             frame = min(frame, self._nb_frames)
         return max(1, frame)
 
+    def toggle_play(self) -> None:
+        """Play if paused, pause if playing (the Space shortcut's target)."""
+        self._toggle_play()
+
+    def step_frames(self, frames: int) -> None:
+        """Nudge the playhead by ``frames`` (negative = back), pausing first.
+
+        Seeks by whole frame durations so the arrow keys walk the clip a frame
+        (or a coarser Shift-step) at a time.
+        """
+        if self._player is None or self._fps <= 0:
+            return
+        self._player.pause()
+        target = self._player.position() + round(frames * 1000.0 / self._fps)
+        self._player.setPosition(max(0, min(target, self._player.duration())))
+
     # --- UI -----------------------------------------------------------------
 
     def _build_ui(self) -> None:

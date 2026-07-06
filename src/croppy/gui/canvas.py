@@ -35,6 +35,8 @@ from croppy.gui.theme import primary_surface, watch_app_palette
 
 _DRAFT_MIN_SIDE = 6.0
 _DRAFT_BORDER = QColor("#ffaa00")
+# Coarse Shift+arrow step, in frames (plain arrows step one frame).
+_SHIFT_STEP_FRAMES = 10
 
 
 class VideoCanvas(QGraphicsView):
@@ -43,6 +45,8 @@ class VideoCanvas(QGraphicsView):
     videos_dropped = Signal(list)  # video files (list[Path]) dropped / chosen here
     folder_dropped = Signal(Path)  # a single folder dropped (opens the batch dialog)
     browse_requested = Signal()  # empty canvas clicked
+    play_pause_requested = Signal()  # Space over the video
+    step_requested = Signal(int)  # frames to step the playhead (±; arrow keys)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -276,13 +280,29 @@ class VideoCanvas(QGraphicsView):
         super().mouseReleaseEvent(event)
 
     def keyPressEvent(self, event) -> None:
-        if event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+        key = event.key()
+        if key in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
             removed_any = False
             for it in list(self._scene.selectedItems()):
                 if isinstance(it, CropRectItem):
                     self.remove_crop(it)
                     removed_any = True
             if removed_any:
+                event.accept()
+                return
+        # Playback shortcuts, only while a video is attached: Space plays/pauses,
+        # ←/→ step a frame (Shift for a coarser jump). The editor forwards these
+        # to the transport bar.
+        if self._video_item is not None:
+            if key == Qt.Key.Key_Space:
+                self.play_pause_requested.emit()
+                event.accept()
+                return
+            if key in (Qt.Key.Key_Left, Qt.Key.Key_Right):
+                step = 1 if key == Qt.Key.Key_Right else -1
+                if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+                    step *= _SHIFT_STEP_FRAMES
+                self.step_requested.emit(step)
                 event.accept()
                 return
         super().keyPressEvent(event)

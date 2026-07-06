@@ -105,6 +105,46 @@ def test_editor_set_image_swaps_pixmap(qtbot, qapp, test_video: Path) -> None:
     assert editor.canvas.image_size() == (320, 240)
 
 
+def _key_press(key, mods=Qt.KeyboardModifier.NoModifier):
+    from PySide6.QtCore import QEvent
+    from PySide6.QtGui import QKeyEvent
+
+    return QKeyEvent(QEvent.Type.KeyPress, key, mods)
+
+
+def test_canvas_space_and_arrows_emit_playback_signals(qtbot, qapp, test_video: Path) -> None:
+    canvas = VideoCanvas()
+    qtbot.addWidget(canvas)
+    canvas.attach_video(test_video, 320, 240)  # a video must be attached for the keys to act
+
+    with qtbot.waitSignal(canvas.play_pause_requested, timeout=500):
+        canvas.keyPressEvent(_key_press(Qt.Key.Key_Space))
+
+    with qtbot.waitSignal(canvas.step_requested, timeout=500) as fwd:
+        canvas.keyPressEvent(_key_press(Qt.Key.Key_Right))
+    assert fwd.args == [1]
+
+    with qtbot.waitSignal(canvas.step_requested, timeout=500) as back:
+        canvas.keyPressEvent(_key_press(Qt.Key.Key_Left))
+    assert back.args == [-1]
+
+    with qtbot.waitSignal(canvas.step_requested, timeout=500) as coarse:
+        canvas.keyPressEvent(_key_press(Qt.Key.Key_Right, Qt.KeyboardModifier.ShiftModifier))
+    assert coarse.args == [10]
+
+
+def test_canvas_playback_keys_inert_without_video(qtbot, qapp) -> None:
+    # With no video attached the keys must fall through (no player to drive).
+    canvas = VideoCanvas()
+    qtbot.addWidget(canvas)
+    fired: list[object] = []
+    canvas.play_pause_requested.connect(lambda: fired.append("play"))
+    canvas.step_requested.connect(fired.append)
+    canvas.keyPressEvent(_key_press(Qt.Key.Key_Space))
+    canvas.keyPressEvent(_key_press(Qt.Key.Key_Right))
+    assert fired == []
+
+
 def test_editor_starts_empty(qtbot, qapp) -> None:
     editor = EditorWidget()
     qtbot.addWidget(editor)
