@@ -57,10 +57,6 @@ class MainWindow(QMainWindow):
         # Match the queue's worker count to the persisted toggle state.
         self._apply_parallel(self.jobs_panel.parallel_enabled())
 
-        # Size the window only after the central widget exists, so the resize
-        # sticks on first show rather than falling back to the layout's size.
-        self._open_at_a_fitting_size()
-
     # --- public API ---------------------------------------------------------
 
     def open_path(self, path: Path) -> None:
@@ -86,26 +82,31 @@ class MainWindow(QMainWindow):
 
     # --- internals ----------------------------------------------------------
 
-    def _open_at_a_fitting_size(self) -> None:
-        """Open at a comfortable size, but never larger than the screen.
+    def show_fitting(self) -> None:
+        """Show the window, sized to the display.
 
-        ``availableGeometry`` already excludes the menu bar and dock, so on a
-        display with room we open at the full 1280×800 default (rather than
-        smaller just because the reduced minimum allows it); on a tighter display
-        we fill what's available. The window is then centred.
+        On a display with room for the 1440×900 default, open *windowed* at that
+        size, centred. On a smaller screen (a laptop that can't fit it), open
+        *maximised* to fill the available area — restoring to a fitted size when
+        un-maximised. ``availableGeometry`` already excludes the menu bar / dock.
         """
-        preferred_w, preferred_h = 1280, 800
+        default_w, default_h = 1440, 900
         screen = self.screen() or QApplication.primaryScreen()
         if screen is None:
-            self.resize(preferred_w, preferred_h)
+            self.resize(default_w, default_h)
+            self.show()
             return
         available = screen.availableGeometry()
-        width = min(preferred_w, available.width())
-        height = min(preferred_h, available.height())
-        self.resize(width, height)
+        fits = available.width() >= default_w and available.height() >= default_h
+        # This is the windowed size (and the restore size when maximised).
+        self.resize(min(default_w, available.width()), min(default_h, available.height()))
         frame = self.frameGeometry()
         frame.moveCenter(available.center())
         self.move(frame.topLeft())
+        if fits:
+            self.show()
+        else:
+            self.showMaximized()
 
     def _on_parallel_toggled(self, enabled: bool) -> None:
         save_parallel_enabled(enabled)

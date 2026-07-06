@@ -43,7 +43,9 @@ def run(video: Path | None = None, log_level_override: str | None = None) -> int
     window = MainWindow()
     if video is not None:
         window.open_path(video)
-    window.show()
+    # Windowed at the default size on a roomy display; maximised to fill a
+    # smaller one that can't fit it.
+    window.show_fitting()
 
     # Check the release channel for a newer version (honours the Settings toggle).
     from croppy.gui.update_check import maybe_check_for_updates

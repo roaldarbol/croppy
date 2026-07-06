@@ -171,6 +171,11 @@ class CombineTab(QWidget):
         self.queued_flash = StatusFlash()
         outer.addWidget(self.queued_flash)
 
+        # Reserve enough width for the controls + scrollbar gutter so the panel
+        # never needs to scroll horizontally (mirroring the Clip editor).
+        needed = controls.minimumSizeHint().width() + gutter + 2 * PANEL_MARGIN
+        side.setMinimumWidth(max(280, needed))
+
         splitter.addWidget(groups_panel)
         splitter.addWidget(self.stack)
         splitter.addWidget(side)
