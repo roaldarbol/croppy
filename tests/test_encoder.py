@@ -155,6 +155,33 @@ def test_combine_command_includes_setpts(monkeypatch) -> None:
     assert "-an" in cmd
 
 
+# --- HEVC hvc1 tagging --------------------------------------------------------
+
+
+def test_hevc_in_mp4_mov_is_tagged_hvc1() -> None:
+    from croppy.ffmpeg.encoder import hevc_tag_args
+
+    # HEVC (explicit, so no nvenc probe) in an isobmff container → hvc1.
+    assert hevc_tag_args(EncodeSettings(encoder="libx265", container="mp4")) == ["-tag:v", "hvc1"]
+    assert hevc_tag_args(EncodeSettings(encoder="libx265", container="mov")) == ["-tag:v", "hvc1"]
+    # H.264 keeps the muxer default (avc1); mkv needs no fourcc tag.
+    assert hevc_tag_args(EncodeSettings(encoder="libx264", container="mp4")) == []
+    assert hevc_tag_args(EncodeSettings(encoder="libx265", container="mkv")) == []
+
+
+def test_encoder_args_appends_hvc1_for_hevc(monkeypatch) -> None:
+    monkeypatch.setattr(enc, "nvenc_available", lambda: False)  # auto → libx265
+    _, out = encoder_args(
+        EncodeSettings(encoder="auto", container="mp4"), allow_hwaccel_decode=False
+    )
+    assert out[out.index("-tag:v") + 1] == "hvc1"
+    # NVENC HEVC is tagged too.
+    _, out = encoder_args(
+        EncodeSettings(encoder="nvenc_hevc", container="mp4"), allow_hwaccel_decode=False
+    )
+    assert out[out.index("-tag:v") + 1] == "hvc1"
+
+
 def test_crop_omits_hwaccel_output_format_even_with_nvenc(monkeypatch) -> None:
     monkeypatch.setattr(enc, "nvenc_available", lambda: True)
     cmd = build_clip_command(
