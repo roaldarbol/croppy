@@ -2,20 +2,19 @@
 
 ## Recommended: `pixi global`
 
-Install Croppy as a global command-line app with [Pixi](https://pixi.sh), from
-the `sleeb-forge` channel (until it lands on conda-forge):
+Croppy is on **conda-forge**, so install it as a global command-line app with
+[Pixi](https://pixi.sh) in one line:
 
 ```bash
-pixi global install croppy -c https://prefix.dev/sleeb-forge -c conda-forge
+pixi global install croppy
 ```
 
 !!! note "Don't have Pixi?"
     [Install Pixi first](https://pixi.sh/latest/installation/) — it's a one-line
     command for macOS, Linux, and Windows.
 
-!!! note "Coming to conda-forge"
-    Croppy is on its way to **conda-forge**. Once it lands you'll be able to
-    `pixi add croppy` or `conda install -c conda-forge croppy`.
+!!! note "Prefer conda?"
+    Croppy is on conda-forge, so `conda install -c conda-forge croppy` works too.
 
 ## Updating
 
@@ -27,6 +26,14 @@ pixi global update croppy
 
 Croppy also checks for a newer version on startup and lets you know when one is
 available.
+
+## Uninstalling
+
+Remove Croppy with:
+
+```bash
+pixi global uninstall croppy
+```
 
 ## Launching
 
