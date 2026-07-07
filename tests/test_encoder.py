@@ -80,6 +80,19 @@ def test_encoder_args_nvenc(monkeypatch) -> None:
     assert "-pix_fmt" not in output_args
 
 
+def test_encoder_args_nvenc_h264(monkeypatch) -> None:
+    # Explicit H.264 NVENC maps to ffmpeg's h264_nvenc and shares the NVENC
+    # quality controls; it must NOT be tagged hvc1 (that's HEVC-only).
+    monkeypatch.setattr(enc, "nvenc_available", lambda: True)
+    settings = EncodeSettings(encoder="nvenc_h264", cq=30, nvenc_preset="p5", container="mp4")
+    input_args, output_args = encoder_args(settings, allow_hwaccel_decode=True)
+    assert input_args == ["-hwaccel", "cuda", "-hwaccel_output_format", "cuda"]
+    assert output_args[:2] == ["-c:v", "h264_nvenc"]
+    assert output_args[output_args.index("-cq") + 1] == "30"
+    assert output_args[output_args.index("-preset") + 1] == "p5"
+    assert "-tag:v" not in output_args  # avc1, not hvc1
+
+
 def test_encoder_args_nvenc_without_hwaccel_decode(monkeypatch) -> None:
     monkeypatch.setattr(enc, "nvenc_available", lambda: True)
     input_args, output_args = encoder_args(
@@ -180,6 +193,68 @@ def test_encoder_args_appends_hvc1_for_hevc(monkeypatch) -> None:
         EncodeSettings(encoder="nvenc_hevc", container="mp4"), allow_hwaccel_decode=False
     )
     assert out[out.index("-tag:v") + 1] == "hvc1"
+
+
+# --- full-range → limited colour-range normalisation --------------------------
+
+
+def _full_range(**kwargs) -> EncodeSettings:
+    """EncodeSettings resolved against a full-range ("pc") source."""
+    return EncodeSettings(**kwargs).for_source(codec="hevc", container="mov", color_range="pc")
+
+
+def test_range_filter_converts_only_full_range_sources() -> None:
+    from croppy.ffmpeg.encoder import range_filter
+
+    assert range_filter(_full_range()) == "scale=in_range=full:out_range=tv"
+    # Already limited → no-op (keeps the fast GPU path).
+    limited = EncodeSettings().for_source(codec="h264", container="mp4", color_range="tv")
+    assert range_filter(limited) is None
+    # Full range but the user turned the setting off → no conversion.
+    assert range_filter(_full_range(limited_range=False)) is None
+
+
+def test_encoder_args_tags_tv_only_when_converting(monkeypatch) -> None:
+    monkeypatch.setattr(enc, "nvenc_available", lambda: True)
+    _, out = encoder_args(_full_range(encoder="nvenc_h264", container="mp4"), allow_hwaccel_decode=True)
+    assert out[out.index("-color_range") + 1] == "tv"
+    # A limited source carries no range tag.
+    limited = EncodeSettings(encoder="nvenc_h264").for_source(
+        codec="hevc", container="mp4", color_range="tv"
+    )
+    _, out = encoder_args(limited, allow_hwaccel_decode=True)
+    assert "-color_range" not in out
+
+
+def test_compress_range_conversion_forces_cpu_decode(monkeypatch) -> None:
+    # The scale filter is CPU-side, so the VRAM decode pipeline must be dropped,
+    # and the output stream tagged tv.
+    monkeypatch.setattr(enc, "nvenc_available", lambda: True)
+    cmd = build_compress_command(Path("in.mov"), Path("out.mp4"), _full_range(encoder="nvenc_h264"))
+    assert cmd[cmd.index("-vf") + 1] == "scale=in_range=full:out_range=tv"
+    assert "-hwaccel_output_format" not in cmd
+    assert cmd[cmd.index("-color_range") + 1] == "tv"
+
+
+def test_clip_range_conversion_precedes_crop(monkeypatch) -> None:
+    monkeypatch.setattr(enc, "nvenc_available", lambda: True)
+    cmd = build_clip_command(
+        input_path=Path("in.mov"),
+        output_path=Path("out.mp4"),
+        region=CropRegion(0, 0, 64, 64),
+        settings=_full_range(encoder="nvenc_h264"),
+    )
+    assert cmd[cmd.index("-vf") + 1] == "scale=in_range=full:out_range=tv,crop=64:64:0:0"
+
+
+def test_limited_source_keeps_gpu_decode_and_no_filter(monkeypatch) -> None:
+    monkeypatch.setattr(enc, "nvenc_available", lambda: True)
+    limited = EncodeSettings(encoder="nvenc_h264").for_source(
+        codec="hevc", container="mp4", color_range="tv"
+    )
+    cmd = build_compress_command(Path("in.mp4"), Path("out.mp4"), limited)
+    assert "-vf" not in cmd  # nothing to convert
+    assert "-hwaccel_output_format" in cmd  # fast VRAM path preserved
 
 
 def test_crop_omits_hwaccel_output_format_even_with_nvenc(monkeypatch) -> None:

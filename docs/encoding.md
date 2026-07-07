@@ -35,7 +35,31 @@ The buttons at the top flip every row at once:
 - **Container** — `mp4` (plays everywhere), `mkv`, or `mov`.
 - **Encoder** — how the video is compressed. **Auto** uses your **graphics card**
   when it can (faster) and the **CPU** otherwise; you can also force GPU
-  (**NVENC HEVC**) or CPU (**libx265** / **libx264**).
+  (**NVENC HEVC** or **NVENC H.264**) or CPU (**libx265** / **libx264**).
+
+!!! info "Video looks slightly narrower in PowerPoint? Use NVENC H.264"
+    When encoding **HEVC** on an NVIDIA GPU (**NVENC HEVC**, and so **Auto** on a
+    GPU machine), heights that aren't a multiple of 32 — including the common
+    **1080p** and **2160p/4K** — are padded up internally (2160 → 2176) and marked
+    with a crop back to the real size. Most players honour that crop, but
+    **Windows PowerPoint ignores it** and shows the padded frame, making the clip
+    render **a little narrower** than the original. macOS is unaffected.
+
+    If you drop clips into PowerPoint on Windows, choose **NVENC H.264** (or a CPU
+    encoder). It's just as GPU-fast and codes those sizes cleanly, so the width
+    matches the source. The trade-off is that H.264 files are larger than HEVC at
+    the same quality.
+
+!!! info "Colours look washed-out or shifted? It's the colour range"
+    Some cameras record **full-range** colour (levels 0–255) rather than the
+    delivery-standard **limited** range (16–235). Several players — notably
+    Windows PowerPoint's H.264 decoder — ignore the flag that says which, assume
+    limited, and mis-map full-range video, giving lifted blacks and off colour.
+
+    Croppy's **Limited colour range** setting (on by default) normalises
+    full-range sources to limited on output, which every player reads correctly —
+    the same thing Adobe does on export. It's a no-op for footage that's already
+    limited range, so you can leave it on.
 
 === "GPU (NVENC)"
 
@@ -62,6 +86,11 @@ The buttons at the top flip every row at once:
   browser before it fully downloads.
 - **Creation date** — copies the source's "Date created" onto the output
   (Windows; a no-op elsewhere).
+- **Limited colour range** — on (the default) converts a *full-range* source to
+  the standard *limited* range, so colours look right in players that ignore the
+  range flag (see the colour note below). It only acts on full-range sources;
+  limited-range footage is left untouched. Turn it off to keep the source's
+  range exactly.
 
 ## Presets — Export & Import
 

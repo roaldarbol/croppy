@@ -15,6 +15,7 @@ from croppy.ffmpeg.encoder import (
     encoder_args,
     faststart_args,
     fps_filter,
+    range_filter,
     speed_filter,
 )
 from croppy.models import EncodeSettings
@@ -34,7 +35,9 @@ def build_compress_command(
     crop's behaviour). ``setpts`` runs before ``fps`` so a resample sees the
     retimed stream.
     """
-    filters = [f for f in (speed_filter(settings), fps_filter(settings)) if f]
+    # A range conversion (like speed/fps) is a CPU-side -vf filter, so its
+    # presence disables the full GPU decode pipeline for the job.
+    filters = [f for f in (range_filter(settings), speed_filter(settings), fps_filter(settings)) if f]
     input_args, video_args = encoder_args(settings, allow_hwaccel_decode=not filters)
     filter_args = ["-vf", ",".join(filters)] if filters else []
 

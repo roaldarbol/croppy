@@ -19,7 +19,6 @@ or older presets still load.
 from __future__ import annotations
 
 import tomllib
-from dataclasses import fields
 from pathlib import Path
 from typing import Any
 
@@ -62,8 +61,8 @@ def to_toml(settings: EncodeSettings) -> str:
     """Serialise ``settings`` to a TOML document (one key per field)."""
     lines = ["# croppy encoding preset"]
     lines += [
-        f"{field.name} = {_toml_value(getattr(settings, field.name))}"
-        for field in fields(EncodeSettings)
+        f"{name} = {_toml_value(getattr(settings, name))}"
+        for name in EncodeSettings.persisted_field_names()
     ]
     return "\n".join(lines) + "\n"
 
@@ -101,12 +100,12 @@ def from_dict(data: dict[str, Any]) -> EncodeSettings:
     """Build :class:`EncodeSettings` from a parsed preset mapping (forgiving)."""
     defaults = EncodeSettings()
     values: dict[str, Any] = {}
-    for field in fields(EncodeSettings):
-        default = getattr(defaults, field.name)
-        if field.name == "applied":
+    for name in EncodeSettings.persisted_field_names():
+        default = getattr(defaults, name)
+        if name == "applied":
             values["applied"] = _coerce_applied(data.get("applied", default))
             continue
-        values[field.name] = _coerce_scalar(data.get(field.name, default), default)
+        values[name] = _coerce_scalar(data.get(name, default), default)
     return EncodeSettings(**values)
 
 

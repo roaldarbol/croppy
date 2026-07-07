@@ -7,8 +7,6 @@ from the organization/application names set in :mod:`croppy.app`.
 
 from __future__ import annotations
 
-from dataclasses import fields
-
 from PySide6.QtCore import QSettings
 
 from croppy.logging import DEFAULT_LEVEL, LEVELS
@@ -27,14 +25,14 @@ def load_encode_settings() -> EncodeSettings:
     store.beginGroup(_ENCODE_GROUP)
     defaults = EncodeSettings()
     values: dict[str, object] = {}
-    for field in fields(EncodeSettings):
-        if field.name == "applied":
+    for name in EncodeSettings.persisted_field_names():
+        if name == "applied":
             values["applied"] = _load_applied(store)
             continue
-        default = getattr(defaults, field.name)
+        default = getattr(defaults, name)
         # bool must be checked before int: bool is a subclass of int.
         py_type = bool if isinstance(default, bool) else type(default)
-        values[field.name] = store.value(field.name, default, type=py_type)
+        values[name] = store.value(name, default, type=py_type)
     store.endGroup()
     return EncodeSettings(**values)
 
@@ -57,11 +55,11 @@ def save_encode_settings(settings: EncodeSettings) -> None:
     """Persist encoding settings so they are restored on the next launch."""
     store = QSettings()
     store.beginGroup(_ENCODE_GROUP)
-    for field in fields(EncodeSettings):
-        value = getattr(settings, field.name)
-        if field.name == "applied":
+    for name in EncodeSettings.persisted_field_names():
+        value = getattr(settings, name)
+        if name == "applied":
             value = sorted(value)  # frozenset → a stable string list
-        store.setValue(field.name, value)
+        store.setValue(name, value)
     store.endGroup()
 
 

@@ -289,7 +289,9 @@ class CompressTab(QWidget):
                 info = probe(path)
                 duration = info.duration_seconds
                 settings = cfg.settings.for_source(
-                    codec=info.codec, container=path.suffix.lstrip(".").lower()
+                    codec=info.codec,
+                    container=path.suffix.lstrip(".").lower(),
+                    color_range=info.color_range,
                 )
             except ProbeError as exc:
                 logger.warning("Could not probe {} before queueing: {}", path, exc)

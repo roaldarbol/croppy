@@ -12,7 +12,13 @@ from __future__ import annotations
 from pathlib import Path
 
 from croppy.ffmpeg.binary import find_ffmpeg
-from croppy.ffmpeg.encoder import audio_args, encoder_args, fps_filter, speed_filter
+from croppy.ffmpeg.encoder import (
+    audio_args,
+    encoder_args,
+    fps_filter,
+    range_filter,
+    speed_filter,
+)
 from croppy.models import EncodeSettings
 
 
@@ -41,7 +47,7 @@ def build_combine_command(
     Writes fragmented mp4 to ``partial_output`` (use :func:`partial_path`).
     Includes ``-progress pipe:1 -nostats`` for progress parsing.
     """
-    filters = [f for f in (speed_filter(settings), fps_filter(settings)) if f]
+    filters = [f for f in (range_filter(settings), speed_filter(settings), fps_filter(settings)) if f]
     input_args, video_args = encoder_args(settings, allow_hwaccel_decode=not filters)
     filter_args = ["-vf", ",".join(filters)] if filters else []
 

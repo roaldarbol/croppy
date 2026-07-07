@@ -328,7 +328,10 @@ class CombineTab(QWidget):
         # Combine always writes mp4; only the encoder can be source-inherited, so
         # resolve it against the first clip (matching the created-date convention).
         try:
-            settings = group.settings.for_source(codec=probe(paths[0]).codec, container="mp4")
+            first = probe(paths[0])
+            settings = group.settings.for_source(
+                codec=first.codec, container="mp4", color_range=first.color_range
+            )
         except ProbeError as exc:
             logger.warning("Could not probe {} before combining: {}", paths[0], exc)
             settings = group.settings

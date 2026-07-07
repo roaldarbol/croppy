@@ -300,7 +300,9 @@ class ClipTab(QWidget):
         # Resolve any source-inherited settings (container/encoder) against this
         # clip, so disabled rows keep the source's container/codec.
         settings = editor.encode_settings().for_source(
-            codec=info.codec, container=video.path.suffix.lstrip(".").lower()
+            codec=info.codec,
+            container=video.path.suffix.lstrip(".").lower(),
+            color_range=info.color_range,
         )
         output_dir = editor.output_dir()
         taken = {job.output_path for job in self._queue.jobs()}
