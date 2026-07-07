@@ -13,9 +13,6 @@ pixi global install croppy
     [Install Pixi first](https://pixi.sh/latest/installation/) — it's a one-line
     command for macOS, Linux, and Windows.
 
-!!! note "Prefer conda?"
-    Croppy is on conda-forge, so `conda install -c conda-forge croppy` works too.
-
 ## Updating
 
 Update Croppy to the latest release with:

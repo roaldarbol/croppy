@@ -53,7 +53,7 @@ pixi global install croppy
 ```
 
 > [!NOTE]
-> Don't have Pixi? [Install it first](https://pixi.sh/latest/installation/) — it's a one-liner. Prefer conda? `conda install -c conda-forge croppy` works too.
+> Don't have Pixi? [Install it first](https://pixi.sh/latest/installation/) — it's a one-liner.
 
 Once installed, launch **Croppy** from your Start menu / Applications folder / app menu, or run it from a terminal:
 
