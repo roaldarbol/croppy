@@ -46,14 +46,14 @@ Croppy is organised into a few tabs that share one **Encoding** panel design and
 
 ## Install
 
-Install Croppy as a global command-line app with [Pixi](https://pixi.sh), from the `sleeb-forge` channel (until it lands on conda-forge):
+Croppy is on **conda-forge**, so install it as a global command-line app with [Pixi](https://pixi.sh) in one line:
 
 ```bash
-pixi global install croppy -c https://prefix.dev/sleeb-forge -c conda-forge
+pixi global install croppy
 ```
 
 > [!NOTE]
-> Don't have Pixi? [Install it first](https://pixi.sh/latest/installation/) — it's a one-liner. Croppy is on its way to **conda-forge**; once it lands you'll be able to drop the `sleeb-forge` channel.
+> Don't have Pixi? [Install it first](https://pixi.sh/latest/installation/) — it's a one-liner.
 
 Once installed, launch **Croppy** from your Start menu / Applications folder / app menu, or run it from a terminal:
 
@@ -61,6 +61,8 @@ Once installed, launch **Croppy** from your Start menu / Applications folder / a
 croppy                    # opens on the Clip tab — drop a video or click to browse
 croppy path/to/clip.mp4   # opens straight into the Clip editor with that clip
 ```
+
+Update with `pixi global update croppy`, or remove it with `pixi global uninstall croppy`.
 
 ## Contributing
 
