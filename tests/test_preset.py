@@ -37,6 +37,16 @@ def test_roundtrip_custom() -> None:
     assert from_toml(to_toml(_CUSTOM)) == _CUSTOM
 
 
+def test_resolved_source_range_is_not_persisted() -> None:
+    # source_full_range is recomputed per source, so it must never be written to
+    # a preset — even if the in-memory settings happen to carry it as True.
+    s = EncodeSettings(limited_range=False, source_full_range=True)
+    text = to_toml(s)
+    assert "source_full_range" not in text
+    assert "limited_range = false" in text
+    assert from_toml(text).source_full_range is False  # back to the neutral default
+
+
 def test_save_and_load_file(tmp_path: Path) -> None:
     path = tmp_path / "preset.toml"
     save_preset(_CUSTOM, path)

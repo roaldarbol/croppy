@@ -5,6 +5,35 @@ from __future__ import annotations
 from croppy.models import CropRegion, EncodeSettings
 
 
+def test_for_source_marks_full_range_source() -> None:
+    # A "pc"/"full" source flips source_full_range; converts_range is then gated
+    # only by the (default-on) limited_range setting.
+    resolved = EncodeSettings().for_source(codec="hevc", container="mov", color_range="pc")
+    assert resolved.source_full_range is True
+    assert resolved.converts_range() is True
+
+
+def test_for_source_leaves_limited_source_untouched() -> None:
+    for rng in ("tv", "limited", ""):
+        resolved = EncodeSettings().for_source(codec="h264", container="mp4", color_range=rng)
+        assert resolved.source_full_range is False
+        assert resolved.converts_range() is False
+
+
+def test_converts_range_off_when_limited_range_disabled() -> None:
+    resolved = EncodeSettings(limited_range=False).for_source(
+        codec="hevc", container="mov", color_range="pc"
+    )
+    assert resolved.source_full_range is True  # source is still full range...
+    assert resolved.converts_range() is False  # ...but the user opted out
+
+
+def test_persisted_field_names_excludes_resolved_state() -> None:
+    names = EncodeSettings.persisted_field_names()
+    assert "source_full_range" not in names  # recomputed per source, never saved
+    assert "limited_range" in names  # a real user setting, persisted
+
+
 def test_crop_region_snap_already_even() -> None:
     r = CropRegion(10, 20, 40, 60).snapped
     assert (r.x, r.y, r.w, r.h) == (10, 20, 40, 60)

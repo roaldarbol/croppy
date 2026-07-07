@@ -34,6 +34,10 @@ class VideoInfo:
     nb_frames: int | None
     codec: str
     container: str
+    #: ffprobe's ``color_range`` for the video stream — ``"pc"`` (full) or
+    #: ``"tv"`` (limited), or ``""`` when the source didn't tag it. Drives the
+    #: full→limited normalisation (see :meth:`EncodeSettings.for_source`).
+    color_range: str = ""
 
 
 def probe(path: Path | str) -> VideoInfo:
@@ -89,6 +93,7 @@ def probe(path: Path | str) -> VideoInfo:
     height = int(stream["height"])
     codec = str(stream.get("codec_name", ""))
     container = str(fmt.get("format_name", ""))
+    color_range = str(stream.get("color_range", ""))
     fps = _parse_rate(stream.get("avg_frame_rate") or stream.get("r_frame_rate") or "0/0")
     duration = _parse_duration(stream, fmt)
     nb_frames = _parse_nb_frames(stream, duration, fps)
@@ -102,6 +107,7 @@ def probe(path: Path | str) -> VideoInfo:
         nb_frames=nb_frames,
         codec=codec,
         container=container,
+        color_range=color_range,
     )
 
 

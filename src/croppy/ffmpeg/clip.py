@@ -17,6 +17,7 @@ from croppy.ffmpeg.encoder import (
     faststart_args,
     fps_filter,
     output_duration_seconds,
+    range_filter,
     speed_filter,
 )
 from croppy.models import CropRegion, EncodeSettings
@@ -51,6 +52,11 @@ def build_clip_command(
     input_args, video_args = encoder_args(settings, allow_hwaccel_decode=False)
 
     filters: list[str] = []
+    # Full→limited range normalisation first, so downstream filters and the
+    # encoder all see limited-range frames.
+    rng = range_filter(settings)
+    if rng:
+        filters.append(rng)
     if region is not None:
         r = region.snapped
         filters.append(f"crop={r.w}:{r.h}:{r.x}:{r.y}")

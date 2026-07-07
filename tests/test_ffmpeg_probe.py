@@ -21,6 +21,7 @@ def test_probe_returns_expected_metadata(test_video: Path) -> None:
     assert "h264" in info.codec.lower()
     assert "mp4" in info.container.lower()
     assert info.path == test_video
+    assert isinstance(info.color_range, str)  # "pc"/"tv"/"" — drives range normalisation
 
 
 def test_probe_missing_file_raises(tmp_path: Path) -> None:

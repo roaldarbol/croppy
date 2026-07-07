@@ -131,8 +131,28 @@ def encoder_args(
         if settings.is_on("pixel_format"):
             output_args += ["-pix_fmt", settings.pixel_format]
 
+    if settings.converts_range():
+        # The range_filter (a CPU -vf) has already remapped the samples to
+        # limited; tag the output stream to match so decoders read them as tv.
+        output_args += ["-color_range", "tv"]
     output_args += hevc_tag_args(settings)
     return input_args, output_args
+
+
+def range_filter(settings: EncodeSettings) -> str | None:
+    """Return the ``scale`` filter that converts full-range samples to limited.
+
+    ``None`` unless :meth:`EncodeSettings.converts_range` — i.e. only when the
+    user wants limited output *and* the source is full range. ``scale`` with no
+    dimensions keeps the frame size and only remaps the levels (0–255 → 16–235),
+    also retagging the pixel format from ``yuvj420p`` to ``yuv420p`` and
+    preserving the colour matrix/primaries. Because it is a CPU-side filter,
+    including it forces callers onto the CPU decode path (as crop/fps/speed do),
+    which is why it is only emitted for genuinely full-range sources.
+    """
+    if not settings.converts_range():
+        return None
+    return "scale=in_range=full:out_range=tv"
 
 
 def hevc_tag_args(settings: EncodeSettings) -> list[str]:

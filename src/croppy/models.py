@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, fields, replace
 
 
 def _floor_even(value: int) -> int:
@@ -158,6 +158,20 @@ class EncodeSettings:
     # otherwise stream-copy the source audio.
     audio_bitrate: str = "192k"
     faststart: bool = True  # only honored for mp4/mov containers
+    # Normalise a *full-range* ("pc") source to *limited* ("tv") range on output.
+    # Full-range video is mis-decoded by players that ignore the range flag (most
+    # notably Windows PowerPoint's H.264 path, which renders it with shifted
+    # colour), so limited — the universal delivery convention, and what Adobe
+    # exports — is the safe default. Off keeps the source's range untouched. Only
+    # actually converts when the source is full range (see ``source_full_range``);
+    # a limited source is left alone so its fast GPU decode path is preserved.
+    limited_range: bool = True
+    # Source-derived, resolved by :meth:`for_source` (not a user control): True
+    # when the input's ``color_range`` is full ("pc"). Paired with ``limited_range``
+    # by :meth:`converts_range`. Marked ``resolved`` so it is not persisted to
+    # presets/QSettings (see :data:`PERSISTED_FIELDS`) — it is recomputed per
+    # source at queue time.
+    source_full_range: bool = field(default=False, metadata={"resolved": True})
     # Stamp the output's creation date from the source clip, so a cropped/
     # compressed/combined file keeps the *original* recording's "Date created"
     # while its "Date modified" reflects when croppy wrote it. Windows-only in
@@ -170,14 +184,44 @@ class EncodeSettings:
         """True if ``key`` is being applied (forced) rather than inherited."""
         return key in self.applied
 
-    def for_source(self, *, codec: str, container: str) -> EncodeSettings:
+    @staticmethod
+    def persisted_field_names() -> tuple[str, ...]:
+        """Field names to save/load (excludes ``resolved`` source-derived state).
+
+        Serialisers (config/preset) iterate this instead of all fields so that
+        source-recomputed markers like ``source_full_range`` never leak into a
+        saved default or an exported preset.
+        """
+        return tuple(f.name for f in fields(EncodeSettings) if not f.metadata.get("resolved"))
+
+    def converts_range(self) -> bool:
+        """True when output should convert full-range source data to limited.
+
+        Only when the user wants normalisation (``limited_range``) *and* the
+        source is actually full range (``source_full_range``, resolved by
+        :meth:`for_source`). A limited source is a no-op so its fast GPU decode
+        path is kept.
+        """
+        return self.limited_range and self.source_full_range
+
+    def for_source(self, *, codec: str, container: str, color_range: str = "") -> EncodeSettings:
         """Resolve source-inherited fields against a concrete source.
 
         When ``container``/``encoder`` are *not* applied, substitute the source's
         container and a matching CPU encoder so the always-emitted muxer/codec
         track the input. Omitted-flag settings (quality, preset, …) need no
         substitution — the arg builders simply skip them.
+
+        ``color_range`` is the source's ffprobe range (``"pc"``/``"full"`` for
+        full range); it sets ``source_full_range`` so :meth:`converts_range` can
+        decide whether the full→limited normalisation actually runs.
         """
         new_container = self.container if self.is_on("container") else (container or self.container)
         new_encoder = self.encoder if self.is_on("encoder") else _cpu_encoder_for(codec)
-        return replace(self, container=new_container, encoder=new_encoder)
+        full_range = color_range.lower() in ("pc", "full")
+        return replace(
+            self,
+            container=new_container,
+            encoder=new_encoder,
+            source_full_range=full_range,
+        )

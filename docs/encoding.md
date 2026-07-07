@@ -50,6 +50,17 @@ The buttons at the top flip every row at once:
     matches the source. The trade-off is that H.264 files are larger than HEVC at
     the same quality.
 
+!!! info "Colours look washed-out or shifted? It's the colour range"
+    Some cameras record **full-range** colour (levels 0–255) rather than the
+    delivery-standard **limited** range (16–235). Several players — notably
+    Windows PowerPoint's H.264 decoder — ignore the flag that says which, assume
+    limited, and mis-map full-range video, giving lifted blacks and off colour.
+
+    Croppy's **Limited colour range** setting (on by default) normalises
+    full-range sources to limited on output, which every player reads correctly —
+    the same thing Adobe does on export. It's a no-op for footage that's already
+    limited range, so you can leave it on.
+
 === "GPU (NVENC)"
 
     - **NVENC CQ** — quality; lower is better/bigger (≈23 looks great, ≈28 is fine
@@ -75,6 +86,11 @@ The buttons at the top flip every row at once:
   browser before it fully downloads.
 - **Creation date** — copies the source's "Date created" onto the output
   (Windows; a no-op elsewhere).
+- **Limited colour range** — on (the default) converts a *full-range* source to
+  the standard *limited* range, so colours look right in players that ignore the
+  range flag (see the colour note below). It only acts on full-range sources;
+  limited-range footage is left untouched. Turn it off to keep the source's
+  range exactly.
 
 ## Presets — Export & Import
 
