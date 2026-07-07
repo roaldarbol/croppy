@@ -119,6 +119,9 @@ class EncodeSettings:
 
     * ``"auto"``       — NVENC HEVC when ``hevc_nvenc`` is available, else libx265.
     * ``"nvenc_hevc"`` — force GPU HEVC (``-cq`` / ``-preset p1..p7``).
+    * ``"nvenc_h264"`` — force GPU H.264 (same NVENC controls). Larger files than
+      HEVC, but codes common heights (1080/2160) without the conformance-crop
+      window that makes NVENC HEVC render slightly narrow in Windows PowerPoint.
     * ``"libx265"`` / ``"libx264"`` — force CPU x265/x264 (``-crf`` / x264-style preset).
 
     ``cq``/``nvenc_preset`` apply to the NVENC path; ``crf``/``preset`` and

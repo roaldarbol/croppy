@@ -35,7 +35,20 @@ The buttons at the top flip every row at once:
 - **Container** — `mp4` (plays everywhere), `mkv`, or `mov`.
 - **Encoder** — how the video is compressed. **Auto** uses your **graphics card**
   when it can (faster) and the **CPU** otherwise; you can also force GPU
-  (**NVENC HEVC**) or CPU (**libx265** / **libx264**).
+  (**NVENC HEVC** or **NVENC H.264**) or CPU (**libx265** / **libx264**).
+
+!!! info "Video looks slightly narrower in PowerPoint? Use NVENC H.264"
+    When encoding **HEVC** on an NVIDIA GPU (**NVENC HEVC**, and so **Auto** on a
+    GPU machine), heights that aren't a multiple of 32 — including the common
+    **1080p** and **2160p/4K** — are padded up internally (2160 → 2176) and marked
+    with a crop back to the real size. Most players honour that crop, but
+    **Windows PowerPoint ignores it** and shows the padded frame, making the clip
+    render **a little narrower** than the original. macOS is unaffected.
+
+    If you drop clips into PowerPoint on Windows, choose **NVENC H.264** (or a CPU
+    encoder). It's just as GPU-fast and codes those sizes cleanly, so the width
+    matches the source. The trade-off is that H.264 files are larger than HEVC at
+    the same quality.
 
 === "GPU (NVENC)"
 

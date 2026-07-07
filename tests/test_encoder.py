@@ -80,6 +80,19 @@ def test_encoder_args_nvenc(monkeypatch) -> None:
     assert "-pix_fmt" not in output_args
 
 
+def test_encoder_args_nvenc_h264(monkeypatch) -> None:
+    # Explicit H.264 NVENC maps to ffmpeg's h264_nvenc and shares the NVENC
+    # quality controls; it must NOT be tagged hvc1 (that's HEVC-only).
+    monkeypatch.setattr(enc, "nvenc_available", lambda: True)
+    settings = EncodeSettings(encoder="nvenc_h264", cq=30, nvenc_preset="p5", container="mp4")
+    input_args, output_args = encoder_args(settings, allow_hwaccel_decode=True)
+    assert input_args == ["-hwaccel", "cuda", "-hwaccel_output_format", "cuda"]
+    assert output_args[:2] == ["-c:v", "h264_nvenc"]
+    assert output_args[output_args.index("-cq") + 1] == "30"
+    assert output_args[output_args.index("-preset") + 1] == "p5"
+    assert "-tag:v" not in output_args  # avc1, not hvc1
+
+
 def test_encoder_args_nvenc_without_hwaccel_decode(monkeypatch) -> None:
     monkeypatch.setattr(enc, "nvenc_available", lambda: True)
     input_args, output_args = encoder_args(

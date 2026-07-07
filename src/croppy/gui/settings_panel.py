@@ -36,6 +36,7 @@ CONTAINERS: tuple[str, ...] = ("mp4", "mkv", "mov")
 ENCODERS_UI: tuple[tuple[str, str], ...] = (
     ("Auto (NVENC → x265)", "auto"),
     ("NVENC HEVC (GPU)", "nvenc_hevc"),
+    ("NVENC H.264 (GPU)", "nvenc_h264"),
     ("CPU libx265", "libx265"),
     ("CPU libx264", "libx264"),
 )
@@ -59,7 +60,7 @@ PIXEL_FORMATS: tuple[str, ...] = ("yuv420p", "yuv422p", "yuv444p")
 AUDIO_BITRATES: tuple[str, ...] = ("96k", "128k", "192k", "256k", "320k")
 
 # Encoder values that use the NVENC / CPU quality controls respectively.
-_NVENC_ENCODERS = frozenset({"auto", "nvenc_hevc"})
+_NVENC_ENCODERS = frozenset({"auto", "nvenc_hevc", "nvenc_h264"})
 _CPU_ENCODERS = frozenset({"auto", "libx265", "libx264"})
 
 # Which encoder pipeline each toggle row is relevant to (True == always).

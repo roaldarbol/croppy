@@ -19,6 +19,13 @@ _FASTSTART_CONTAINERS = frozenset({"mp4", "mov"})
 # tagged ``hvc1`` (see hevc_tag_args).
 _HEVC_ENCODERS = frozenset({"nvenc_hevc", "libx265"})
 _HVC1_CONTAINERS = frozenset({"mp4", "mov"})
+# Map each stored NVENC encoder value to its ffmpeg ``-c:v`` name. Both take the
+# same ``-preset``/``-cq`` controls. H.264 NVENC exists as a manual choice
+# because ``hevc_nvenc`` aligns the coded height up to a multiple of 32 (e.g.
+# 2160 -> 2176, 1080 -> 1088) and relies on an HEVC conformance-crop window that
+# Windows PowerPoint ignores, rendering the frame slightly narrow; H.264 codes
+# these common heights cleanly (or with a crop window PowerPoint *does* honor).
+_NVENC_FFMPEG = {"nvenc_hevc": "hevc_nvenc", "nvenc_h264": "h264_nvenc"}
 
 
 @lru_cache(maxsize=1)
@@ -75,7 +82,9 @@ def nvenc_available() -> bool:
 def resolve_encoder(settings: EncodeSettings) -> str:
     """Collapse ``"auto"`` to a concrete encoder based on NVENC availability.
 
-    Returns one of ``"nvenc_hevc"``, ``"libx265"`` or ``"libx264"``.
+    Returns one of ``"nvenc_hevc"``, ``"nvenc_h264"``, ``"libx265"`` or
+    ``"libx264"``. ``"auto"`` only ever resolves to ``"nvenc_hevc"`` (or the CPU
+    fallback); ``"nvenc_h264"`` is opt-in via an explicit encoder choice.
     """
     if settings.encoder == "auto":
         return "nvenc_hevc" if nvenc_available() else "libx265"
@@ -102,13 +111,13 @@ def encoder_args(
     input_args: list[str] = []
     output_args: list[str] = []
 
-    if resolved == "nvenc_hevc":
+    if resolved in _NVENC_FFMPEG:
         if allow_hwaccel_decode:
             input_args += ["-hwaccel", "cuda", "-hwaccel_output_format", "cuda"]
         # No -pix_fmt: with -hwaccel_output_format cuda the frames are a CUDA
         # format and forcing yuv420p on the output can make ffmpeg refuse the
         # conversion. NVENC picks an appropriate format itself.
-        output_args += ["-c:v", "hevc_nvenc"]
+        output_args += ["-c:v", _NVENC_FFMPEG[resolved]]
         if settings.is_on("nvenc_preset"):
             output_args += ["-preset", settings.nvenc_preset]
         if settings.is_on("cq"):
