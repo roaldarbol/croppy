@@ -1,7 +1,7 @@
 version: 2
 
-# Note: pixi.lock is not handled by Dependabot. Run `pixi update` locally,
-# or wire up prefix-dev/setup-pixi's auto-update workflow if you want bot PRs.
+# pixi.lock is not handled by Dependabot; the Update pixi.lock workflow
+# (.github/workflows/update-lock.yml) refreshes it monthly instead.
 
 updates:
   - package-ecosystem: github-actions

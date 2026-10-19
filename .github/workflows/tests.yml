@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Lets the Update pixi.lock workflow run tests on its PR (PRs opened with
+  # GITHUB_TOKEN don't trigger CI on their own).
+  workflow_dispatch:
 
 defaults:
   run:
