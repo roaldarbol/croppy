@@ -26,7 +26,7 @@ def parse_version(text: str) -> tuple[int, ...]:
 
     Lenient: each dotted field contributes its leading digits, and parsing stops
     at the first field without any (so a ``1.2rc1``-style suffix is ignored rather
-    than crashing). An unparseable string yields ``()``, which sorts lowest.
+    than crashing). An unparsable string yields ``()``, which sorts lowest.
     """
     parts: list[int] = []
     for field in text.split("."):
