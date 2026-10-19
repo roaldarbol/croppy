@@ -28,6 +28,7 @@ jobs:
 
       - uses: prefix-dev/setup-pixi@v0.10.1
         with:
+          pixi-version: v0.82.0
           environments: dev
           cache: true
 
