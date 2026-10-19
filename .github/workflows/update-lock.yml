@@ -1,0 +1,52 @@
+name: Update pixi.lock
+
+# Keep pixi.lock fresh. Dependabot can't update pixi.lock, so once a month
+# re-solve every environment against the newest versions pixi.toml allows and
+# open (or refresh) a PR with the result and a summary of what changed.
+on:
+  schedule:
+    - cron: "0 6 1 * *"  # 06:00 UTC on the 1st of each month
+  workflow_dispatch:
+
+permissions:
+  contents: write        # push the update branch
+  pull-requests: write   # open/refresh the PR
+  actions: write         # to trigger tests on the PR (see final step)
+
+jobs:
+  update:
+    name: Update pixi.lock
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up pixi
+        uses: prefix-dev/setup-pixi@v0.11.2
+        with:
+          pixi-version: v0.72.0
+          run-install: false
+
+      - name: Update lockfile
+        run: |
+          set -o pipefail
+          pixi update --json | pixi exec pixi-diff-to-markdown > diff.md
+
+      - name: Open pull request
+        id: pr
+        uses: peter-evans/create-pull-request@v8.1.1
+        with:
+          branch: chore/update-pixi-lock
+          add-paths: pixi.lock
+          commit-message: Update pixi.lock
+          title: Update pixi.lock
+          body-path: diff.md
+          labels: dependencies
+          delete-branch: true
+
+      # A PR opened with GITHUB_TOKEN does not trigger CI, so kick off the
+      # tests on the PR branch explicitly to validate the refreshed lock.
+      - name: Trigger tests on the PR
+        if: steps.pr.outputs.pull-request-operation == 'created' || steps.pr.outputs.pull-request-operation == 'updated'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run tests.yml --ref chore/update-pixi-lock
