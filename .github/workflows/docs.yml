@@ -30,6 +30,7 @@ jobs:
       # (the committed screenshots are used as-is, so nothing is regenerated).
       - uses: prefix-dev/setup-pixi@v0.11.2
         with:
+          pixi-version: v0.82.0
           environments: docs
           cache: true
 
