@@ -44,9 +44,11 @@ jobs:
           delete-branch: true
 
       # A PR opened with GITHUB_TOKEN does not trigger CI, so kick off the
-      # tests on the PR branch explicitly to validate the refreshed lock.
-      - name: Trigger tests on the PR
+      # tests and the audit on the PR branch explicitly to validate the refreshed lock.
+      - name: Trigger tests and audit on the PR
         if: steps.pr.outputs.pull-request-operation == 'created' || steps.pr.outputs.pull-request-operation == 'updated'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run tests.yml --ref chore/update-pixi-lock
+        run: |
+          gh workflow run tests.yml --ref chore/update-pixi-lock
+          gh workflow run audit.yml --ref chore/update-pixi-lock
