@@ -1,0 +1,33 @@
+name: Audit
+
+# Security audit of the locked dependencies. Advisories land against pixi.lock
+# independently of any code change, so this runs weekly against main (a failed
+# scheduled run emails the maintainer), on demand, and on PRs that change the lock.
+on:
+  schedule:
+    - cron: "0 6 * * 1"  # 06:00 UTC every Monday
+  pull_request:
+    paths:
+      - pixi.lock
+      - .github/workflows/audit.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Security audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up pixi
+        uses: prefix-dev/setup-pixi@v0.11.2
+        with:
+          pixi-version: v0.82.0
+          environments: audit
+          locked: true
+
+      - name: Audit dependencies
+        run: pixi run -e audit audit

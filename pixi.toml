@@ -44,7 +44,17 @@ docs = { cmd = "zensical serve", description = "Serve the docs site locally with
 docs-build = { cmd = "zensical build", description = "Build the static docs site into ./site/." }
 screenshots = { cmd = "python scripts/screenshots.py", description = "Regenerate the docs screenshots (light + dark)." }
 
+# Security audit. The audit environment combines the other features so pip-audit
+# sees every locked package. See .github/workflows/audit.yml.
+[feature.audit.dependencies]
+pip-audit = ">=2.10"
+filelock = "*"  # pip-audit's cache needs it, but the conda package doesn't depend on it
+
+[feature.audit.tasks]
+audit = "pip-audit"
+
 [environments]
 default = { solve-group = "default" }
 dev = { features = ["dev"], solve-group = "default" }
 docs = { features = ["docs"], solve-group = "default" }
+audit = { features = ["dev", "docs", "audit"], solve-group = "default" }
