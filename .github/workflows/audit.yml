@@ -26,8 +26,15 @@ jobs:
         uses: prefix-dev/setup-pixi@v0.11.2
         with:
           pixi-version: v0.82.0
-          environments: audit
+          environments: dev docs
           locked: true
 
+      # pip-audit runs from pipx rather than a pixi environment, because an
+      # environment combining the others would make their tasks ambiguous.
       - name: Audit dependencies
-        run: pixi run -e audit audit
+        run: |
+          paths=()
+          for path in .pixi/envs/*/lib/python3.[0-9][0-9]/site-packages; do
+            paths+=(--path "$path")
+          done
+          pipx run pip-audit "${paths[@]}"
