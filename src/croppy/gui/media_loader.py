@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import weakref
 from collections.abc import Callable
-from typing import Any
+from typing import Any, ClassVar
 
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
 from shiboken6 import isValid
@@ -48,7 +48,7 @@ class MediaLoader(QObject):
 
     #: Every live loader, so background work can be drained deterministically
     #: (see :meth:`drain_all`).
-    _instances: weakref.WeakSet[MediaLoader] = weakref.WeakSet()
+    _instances: ClassVar[weakref.WeakSet[MediaLoader]] = weakref.WeakSet()
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
